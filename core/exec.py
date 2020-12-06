@@ -16,6 +16,8 @@ import numpy as np
 import torch.nn as nn
 import torch.utils.data as Data
 
+from core.utils import align_and_update_state_dicts, get_loss
+
 
 class Execution:
     def __init__(self, __C):
@@ -58,6 +60,7 @@ class Execution:
         # Define the binary cross entropy loss
         # loss_fn = torch.nn.BCELoss(size_average=False).cuda()
         loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
+        # loss_fn = torch.nn.BCELoss(reduction='none').cuda()
 
         # Load checkpoint if resume training
         if self.__C.RESUME:
@@ -77,7 +80,13 @@ class Execution:
             print('Loading ckpt {}'.format(path))
             ckpt = torch.load(path)
             print('Finish!')
-            net.load_state_dict(ckpt['state_dict'])
+            # TODO muchen: load part of the model based on the original model
+            model_state_dict = net.state_dict()
+            align_and_update_state_dicts(
+                model_state_dict,
+                ckpt['state_dict']
+            )
+            #net.load_state_dict(ckpt['state_dict'])
 
             # Load the optimizer paramters
             optim = get_optim(self.__C, net, data_size, ckpt['lr_base'])
@@ -148,7 +157,9 @@ class Execution:
             for step, (
                     img_feat_iter,
                     ques_ix_iter,
-                    ans_iter
+                    ans_iter,
+                    abs_iter,
+                    node_groups
             ) in enumerate(dataloader):
 
                 optim.zero_grad()
@@ -156,7 +167,10 @@ class Execution:
                 img_feat_iter = img_feat_iter.cuda()
                 ques_ix_iter = ques_ix_iter.cuda()
                 ans_iter = ans_iter.cuda()
+                abs_iter = abs_iter.cuda()
+                node_groups = node_groups.cuda()
 
+                # TODO MODIFY HERE
                 for accu_step in range(self.__C.GRAD_ACCU_STEPS):
 
                     sub_img_feat_iter = \
@@ -168,34 +182,50 @@ class Execution:
                     sub_ans_iter = \
                         ans_iter[accu_step * self.__C.SUB_BATCH_SIZE:
                                  (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    sub_abs_iter = \
+                        abs_iter[accu_step * self.__C.SUB_BATCH_SIZE:
+                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    sub_node_groups = \
+                        node_groups[accu_step * self.__C.SUB_BATCH_SIZE:
+                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
 
-
-                    pred = net(
+                    # TODO get pred and pred_parent
+                    pred, pred_abs = net(
                         sub_img_feat_iter,
                         sub_ques_ix_iter
                     )
 
-                    loss = loss_fn(pred, sub_ans_iter)
+                    # TODO loss of pred_parent and pred based on gt path
+                    loss_ans, loss_abs = get_loss(pred, pred_ans, 
+                                        sub_ans_iter, sub_abs_iter, 
+                                        sub_node_groups, loss_fn)
+                    loss = loss_ans + loss_abs
+                    # loss = loss_fn(pred, sub_ans_iter)
+
                     # only mean-reduction needs be divided by grad_accu_steps
                     # removing this line wouldn't change our results because the speciality of Adam optimizer,
                     # but would be necessary if you use SGD optimizer.
-                    # loss /= self.__C.GRAD_ACCU_STEPS
+                    loss /= self.__C.GRAD_ACCU_STEPS
                     loss.backward()
                     loss_sum += loss.cpu().data.numpy() * self.__C.GRAD_ACCU_STEPS
 
+                    # TODO ADD things here
                     if self.__C.VERBOSE:
                         if dataset_eval is not None:
                             mode_str = self.__C.SPLIT['train'] + '->' + self.__C.SPLIT['val']
                         else:
                             mode_str = self.__C.SPLIT['train'] + '->' + self.__C.SPLIT['test']
 
-                        print("\r[version %s][epoch %2d][step %4d/%4d][%s] loss: %.4f, lr: %.2e" % (
+                        print("\r[version %s][epoch %2d][step %4d/%4d][%s] loss: %.4f loss ans: %.4f loss abs: %.4f,, lr: %.2e" % (
                             self.__C.VERSION,
                             epoch + 1,
                             step,
                             int(data_size / self.__C.BATCH_SIZE),
                             mode_str,
-                            loss.cpu().data.numpy() / self.__C.SUB_BATCH_SIZE,
+                            loss.cpu().data.numpy(),
+                            loss_ans.cpu().data.numpy(),
+                            loss_abs.cpu().data.numpy(),
+                            # loss.cpu().data.numpy() / self.__C.SUB_BATCH_SIZE,
                             optim._rate
                         ), end='          ')
 

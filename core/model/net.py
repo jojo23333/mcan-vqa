@@ -59,7 +59,7 @@ class AttFlat(nn.Module):
 # -------------------------
 
 class Net(nn.Module):
-    def __init__(self, __C, pretrained_emb, token_size, answer_size):
+    def __init__(self, __C, pretrained_emb, token_size, answer_size, num_of_abstraction=3):
         super(Net, self).__init__()
 
         self.embedding = nn.Embedding(
@@ -90,6 +90,8 @@ class Net(nn.Module):
 
         self.proj_norm = LayerNorm(__C.FLAT_OUT_SIZE)
         self.proj = nn.Linear(__C.FLAT_OUT_SIZE, answer_size)
+
+        self.proj_abs = nn.Linear(__C.FLAT_OUT_SIZE, num_of_abstraction)
 
 
     def forward(self, img_feat, ques_ix):
@@ -122,12 +124,15 @@ class Net(nn.Module):
             img_feat,
             img_feat_mask
         )
+        # TODO: use lang feature alone to predict hirachical tree for 
+        abs_feat = self.proj_norm(lang_feat)
+        abs_feat = torch.sigmoid(self.proj_abs(abs_feat))
 
         proj_feat = lang_feat + img_feat
         proj_feat = self.proj_norm(proj_feat)
         proj_feat = torch.sigmoid(self.proj(proj_feat))
 
-        return proj_feat
+        return proj_feat, abs_feat
 
 
     # Masking

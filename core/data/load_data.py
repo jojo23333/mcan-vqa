@@ -107,7 +107,11 @@ class DataSet(Data.Dataset):
         print('Finished!')
         print('')
 
+        
+        # TODO
+        self.init_abs_tree()
 
+    # TODO modify dataloader and return gt abstractions and node groups for computing loss
     def __getitem__(self, idx):
 
         # For code safety
@@ -133,7 +137,8 @@ class DataSet(Data.Dataset):
             ques_ix_iter = proc_ques(ques, self.token_to_ix, self.__C.MAX_TOKEN)
 
             # Process answer
-            ans_iter = proc_ans(ans, self.ans_to_ix)
+            # ans_iter = proc_ans(ans, self.ans_to_ix)
+            ans_iter, abs_iter, loss_groups = self.proc_ans_and_abs(ans)
 
         else:
             # Load the run data from list
@@ -156,8 +161,74 @@ class DataSet(Data.Dataset):
 
         return torch.from_numpy(img_feat_iter), \
                torch.from_numpy(ques_ix_iter), \
-               torch.from_numpy(ans_iter)
+               torch.from_numpy(ans_iter), \
+               torch.from_numpy(abs_iter), \
+               loss_groups
 
+    def proc_ans_and_abs(self, ans):
+        ans_to_ix = self.ans_to_ix
+        abs_to_ix = self.abs_to_ix
+        ans_score = np.zeros(ans_to_ix.__len__(), np.float32)
+        abs_score = np.zeros(abs_to_ix.__len__(), np.float32)
+        ans_prob_dict = {}
+        # process ans
+        for ans_ in ans['answers']:
+            ans_proc = prep_ans(ans_['answer'])
+            if ans_proc not in ans_prob_dict:
+                ans_prob_dict[ans_proc] = 1
+            else:
+                ans_prob_dict[ans_proc] += 1
+
+        for ans_ in ans_prob_dict:
+            if ans_ in ans_to_ix:
+                ans_score[ans_to_ix[ans_]] = get_score(ans_prob_dict[ans_])
+
+        # process abstraction
+        ans_appear_most = sorted(ans_prob_dict.items(), key=lambda x: -1*x[1])[0][0]
+        abspath = self.ans_to_abspath[ans_appear_most]  # from top to down
+        for abs_ in abspath[1:]:
+            abs_score[abs_to_ix[abs_]] = 1.0
+
+        # Select groups for computing losses
+        abs_group = []
+        ans_group = []
+        for x in abspath:
+            children = self.abs_tree[x]
+            if children[0] in ans_to_ix:
+                ans_group += [ans_to_ix[a] for a in children]
+            else:
+                abs_group.append([abs_to_ix[a] for a in children])
+        if len(abspath) == 0:
+            ans_group = list(range(ans_to_ix.__len__()))
+        groups = abs_group + [ans_group]
+
+        return ans_score, abs_score, groups
+
+    # TODO
+    def init_abs_tree(self):
+        with open('core/data/answer_dict_hierarchical.json', 'r') as f:
+            data = json.load(f)
+        # edge link of the abs tree
+        self.abs_tree = data['tree_dict']
+        # list of id from abs to ix
+        self.abs_to_ix =  data['abs_dict']
+        # given ans, give all possible nodes of path to the ans, the first comonent is always '_root'
+        self.ans_to_abspath = {x:[] for x in self.ans_to_ix.keys()}
+
+        def dfs_search(current_node, path, tree):
+            # if not leaf node yet
+            if current_node in tree:
+                for child in tree[current_node]:
+                    dfs_search(child, path+[current_node], tree)
+            else:
+                for x in path:
+                    if x not in self.ans_to_abspath[current_node]:
+                        self.ans_to_abspath[current_node].append(x)
+        
+        dfs_search('_root', [], self.abs_tree)
+        # for ans_ in self.ans_to_ix.keys():
+        #     if ans_ not in self.ans_to_abspath:
+        #         self.ans_to_abspath = 
 
     def __len__(self):
         return self.data_size
