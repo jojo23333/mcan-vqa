@@ -59,8 +59,8 @@ class Execution:
 
         # Define the binary cross entropy loss
         # loss_fn = torch.nn.BCELoss(size_average=False).cuda()
-        loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
-        # loss_fn = torch.nn.BCELoss(reduction='none').cuda()
+        # loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
+        loss_fn = torch.nn.BCELoss(reduction='mean').cuda()
 
         # Load checkpoint if resume training
         if self.__C.RESUME:
@@ -160,7 +160,7 @@ class Execution:
                     ques_ix_iter,
                     ans_iter,
                     abs_iter,
-                    node_groups
+                    loss_masks
             ) in enumerate(dataloader):
 
                 optim.zero_grad()
@@ -169,7 +169,8 @@ class Execution:
                 ques_ix_iter = ques_ix_iter.cuda()
                 ans_iter = ans_iter.cuda()
                 abs_iter = abs_iter.cuda()
-                print(node_groups)
+                mask_abs, mask_ans = [x.cuda() for x in loss_masks]
+                print(loss_masks)
 
                 # TODO MODIFY HERE
                 for accu_step in range(self.__C.GRAD_ACCU_STEPS):
@@ -186,8 +187,11 @@ class Execution:
                     sub_abs_iter = \
                         abs_iter[accu_step * self.__C.SUB_BATCH_SIZE:
                                  (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    sub_node_groups = \
-                        node_groups[accu_step * self.__C.SUB_BATCH_SIZE:
+                    sub_mask_abs = \
+                        mask_abs[accu_step * self.__C.SUB_BATCH_SIZE:
+                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    sub_mask_ans = \
+                        mask_ans[accu_step * self.__C.SUB_BATCH_SIZE:
                                  (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
 
                     # TODO get pred and pred_parent
@@ -198,8 +202,9 @@ class Execution:
 
                     # TODO loss of pred_parent and pred based on gt path
                     loss_ans, loss_abs = get_loss(pred, pred_abs, 
-                                        sub_ans_iter, sub_abs_iter, 
-                                        sub_node_groups, loss_fn)
+                                                  sub_ans_iter, sub_abs_iter, 
+                                                  sub_mask_ans, sub_mask_abs, 
+                                                  loss_fn)
                     loss = loss_ans + loss_abs
                     # loss = loss_fn(pred, sub_ans_iter)
 

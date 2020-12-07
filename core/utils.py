@@ -3,35 +3,48 @@ import logging
 import re
 import torch
 
-def get_loss(pred, pred_abs, gt_ans, gt_abs, loss_groups, loss_fn):
+def get_loss(pred, pred_abs, 
+             gt_ans, gt_abs, 
+             mask_ans, mask_abs, 
+             loss_fn):
     '''
         abs_group batch_size * N list
         loss_fn should use mean reduction
     '''
-    losses_ans = []
-    losses_abs = []
-    batch_size, num_class = pred.shape
-    print(pred.shape)
-    print(loss_groups)
-    assert batch_size == len(loss_groups)
-    for i in range(batch_size):
-        print(loss_groups[i])
 
-        loss_groups = []
-        # loss for abstraction nodes
-        for g in loss_groups[i][:-1]:
-            loss_groups.append(loss_fn(pred_abs[i, g], gt_abs[i, g]))
-        loss_abs = torch.mean(torch.stack(loss_groups))
-        losses_abs.append(loss_abs)
-    
-        # loss for leaf nodes
-        ans_group = loss_groups[i][-1]
-        loss_ans = loss_fn(pred[i, ans_group], gt_ans[i, ans_group])
-        losses_ans.append(loss_ans)
-        
-    loss_ans = torch.mean(torch.stack(losses_ans))
-    loss_abs = torch.mean(torch.stack(losses_abs))
+    s_pred_ans = torch.masked_select(pred, mask_ans)
+    s_gt_ans   = torch.masked_select(gt_ans, mask_ans)
+    loss_ans = loss_fn(s_pred_ans, s_gt_ans)
+
+    s_pred_abs = torch.masked_select(pred_abs, mask_abs)
+    s_gt_bas   = torch.masked_select(gt_abs, mask_abs)
+    loss_abs = loss_fn(s_pred_abs, s_gt_bas)
     return loss_ans, loss_abs
+
+
+    # losses_ans = []
+    # losses_abs = []
+    # batch_size, num_class = pred.shape
+    # print(pred.shape)
+    # print(loss_groups)
+    # assert batch_size == len(loss_groups)
+    # for i in range(batch_size):
+
+    #     loss_groups = []
+    #     # loss for abstraction nodes
+    #     for g in loss_groups[i][:-1]:
+    #         loss_groups.append(loss_fn(pred_abs[i, g], gt_abs[i, g]))
+    #     loss_abs = torch.mean(torch.stack(loss_groups))
+    #     losses_abs.append(loss_abs)
+    
+    #     # loss for leaf nodes
+    #     ans_group = loss_groups[i][-1]
+    #     loss_ans = loss_fn(pred[i, ans_group], gt_ans[i, ans_group])
+    #     losses_ans.append(loss_ans)
+        
+    # loss_ans = torch.mean(torch.stack(losses_ans))
+    # loss_abs = torch.mean(torch.stack(losses_abs))
+    # return loss_ans, loss_abs
 
 # Note the current matching is not symmetric.
 # it assumes model_state_dict will have longer names.

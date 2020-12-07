@@ -140,7 +140,7 @@ class DataSet(Data.Dataset):
 
             # Process answer
             # ans_iter = proc_ans(ans, self.ans_to_ix)
-            ans_iter, abs_iter, loss_groups = self.proc_ans_and_abs(ans)
+            ans_iter, abs_iter, loss_masks = self.proc_ans_and_abs(ans)
 
         else:
             # Load the run data from list
@@ -172,6 +172,9 @@ class DataSet(Data.Dataset):
         abs_to_ix = self.abs_to_ix
         ans_score = np.zeros(ans_to_ix.__len__(), np.float32)
         abs_score = np.zeros(abs_to_ix.__len__(), np.float32)
+        ans_group = np.zeros(ans_to_ix.__len__(), np.bool)
+        abs_group = np.zeros(abs_to_ix.__len__(), np.bool)
+
         ans_prob_dict = {}
         # process ans
         for ans_ in ans['answers']:
@@ -187,31 +190,30 @@ class DataSet(Data.Dataset):
 
         # process abstraction
         ans_appear_most = sorted(ans_prob_dict.items(), key=lambda x: -1*x[1])[0][0]
-        if ans_appear_most not in ans_to_ix:
-            return ans_score, abs_score, [list(range(ans_to_ix.__len__()))]
+        
+            
+        if ans_appear_most in ans_to_ix:
+            # from top to down
+            abspath = self.ans_to_abspath[ans_appear_most]
+            # Select groups for computing losses
+            if len(abspath) != 0:
+                for abs_ in abspath[1:]:
+                    abs_score[abs_to_ix[abs_]] = 1.0
 
-        abspath = self.ans_to_abspath[ans_appear_most]  # from top to down
-        for abs_ in abspath[1:]:
-            abs_score[abs_to_ix[abs_]] = 1.0
+                for x in abspath:
+                    children = self.abs_tree[x]
+                    if children[0] in ans_to_ix:
+                        ids = [ans_to_ix[a] for a in children]
+                        ans_group[ids] = True
+                    else:
+                        ids = [abs_to_ix[a] for a in children]
+                        abs_group[ids] = True
 
-        # Select groups for computing losses
-        abs_group = []
-        ans_group = []
-        for x in abspath:
-            children = self.abs_tree[x]
-            if children[0] in ans_to_ix:
-                ans_group += [ans_to_ix[a] for a in children]
-            else:
-                abs_group.append([abs_to_ix[a] for a in children])
-        if len(abspath) == 0:
-            ans_group = list(range(ans_to_ix.__len__()))
-        print(abspath)
-        print(abs_group)
-        print("")
-        print(ans_group)
-        groups = abs_group + [ans_group]
+                return ans_score, abs_score, (abs_group, ans_group)
 
-        return ans_score, abs_score, groups
+        return ans_score, abs_score,\ 
+               (np.zeros(abs_to_ix.__len__(), np.bool),\
+                np.ones(ans_to_ix.__len__(), np.bool))
 
     # TODO
     def init_abs_tree(self):
