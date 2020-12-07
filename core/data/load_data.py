@@ -10,6 +10,8 @@ from core.data.data_utils import proc_img_feat, proc_ques, proc_ans
 import numpy as np
 import glob, json, torch, time
 import torch.utils.data as Data
+from core.data.ans_punct import prep_ans
+from core.data.data_utils import get_score
 
 
 class DataSet(Data.Dataset):
@@ -185,6 +187,9 @@ class DataSet(Data.Dataset):
 
         # process abstraction
         ans_appear_most = sorted(ans_prob_dict.items(), key=lambda x: -1*x[1])[0][0]
+        if ans_appear_most not in ans_to_ix:
+            return ans_score, abs_score, [list(range(ans_to_ix.__len__()))]
+
         abspath = self.ans_to_abspath[ans_appear_most]  # from top to down
         for abs_ in abspath[1:]:
             abs_score[abs_to_ix[abs_]] = 1.0
@@ -200,6 +205,10 @@ class DataSet(Data.Dataset):
                 abs_group.append([abs_to_ix[a] for a in children])
         if len(abspath) == 0:
             ans_group = list(range(ans_to_ix.__len__()))
+        print(abspath)
+        print(abs_group)
+        print("")
+        print(ans_group)
         groups = abs_group + [ans_group]
 
         return ans_score, abs_score, groups
@@ -217,7 +226,9 @@ class DataSet(Data.Dataset):
 
         def dfs_search(current_node, path, tree):
             # if not leaf node yet
+            print(f"Processing node: {current_node}:{path}")
             if current_node in tree:
+                print(f"Processing node: {current_node}:{path}")
                 for child in tree[current_node]:
                     dfs_search(child, path+[current_node], tree)
             else:
@@ -225,7 +236,8 @@ class DataSet(Data.Dataset):
                     if x not in self.ans_to_abspath[current_node]:
                         self.ans_to_abspath[current_node].append(x)
         
-        dfs_search('_root', [], self.abs_tree)
+        dfs_search('_rt', [], self.abs_tree)
+        print("Processing of tree finished")
         # for ans_ in self.ans_to_ix.keys():
         #     if ans_ not in self.ans_to_abspath:
         #         self.ans_to_abspath = 

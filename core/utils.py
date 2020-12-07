@@ -11,7 +11,11 @@ def get_loss(pred, pred_abs, gt_ans, gt_abs, loss_groups, loss_fn):
     losses_ans = []
     losses_abs = []
     batch_size, num_class = pred.shape
+    print(pred.shape)
+    print(loss_groups)
+    assert batch_size == len(loss_groups)
     for i in range(batch_size):
+        print(loss_groups[i])
 
         loss_groups = []
         # loss for abstraction nodes

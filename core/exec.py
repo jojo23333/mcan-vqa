@@ -129,6 +129,7 @@ class Execution:
             )
 
         # Training script
+        print("begin training", flush=True)
         for epoch in range(start_epoch, self.__C.MAX_EPOCH):
 
             # Save log information
@@ -168,7 +169,7 @@ class Execution:
                 ques_ix_iter = ques_ix_iter.cuda()
                 ans_iter = ans_iter.cuda()
                 abs_iter = abs_iter.cuda()
-                node_groups = node_groups.cuda()
+                print(node_groups)
 
                 # TODO MODIFY HERE
                 for accu_step in range(self.__C.GRAD_ACCU_STEPS):
@@ -196,7 +197,7 @@ class Execution:
                     )
 
                     # TODO loss of pred_parent and pred based on gt path
-                    loss_ans, loss_abs = get_loss(pred, pred_ans, 
+                    loss_ans, loss_abs = get_loss(pred, pred_abs, 
                                         sub_ans_iter, sub_abs_iter, 
                                         sub_node_groups, loss_fn)
                     loss = loss_ans + loss_abs
