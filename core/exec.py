@@ -170,7 +170,7 @@ class Execution:
                 ans_iter = ans_iter.cuda()
                 abs_iter = abs_iter.cuda()
                 mask_abs, mask_ans = [x.cuda() for x in loss_masks]
-                print(loss_masks)
+                # print(loss_masks)
 
                 # TODO MODIFY HERE
                 for accu_step in range(self.__C.GRAD_ACCU_STEPS):
@@ -290,12 +290,12 @@ class Execution:
             logfile.close()
 
             # Eval after every epoch
-            if dataset_eval is not None:
-                self.eval(
-                    dataset_eval,
-                    state_dict=net.state_dict(),
-                    valid=True
-                )
+            #if dataset_eval is not None:
+            #    self.eval(
+            #        dataset_eval,
+            #        state_dict=net.state_dict(),
+            #        valid=True
+            #    )
 
             # if self.__C.VERBOSE:
             #     logfile = open(

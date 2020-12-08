@@ -165,7 +165,7 @@ class DataSet(Data.Dataset):
                torch.from_numpy(ques_ix_iter), \
                torch.from_numpy(ans_iter), \
                torch.from_numpy(abs_iter), \
-               loss_groups
+               loss_masks
 
     def proc_ans_and_abs(self, ans):
         ans_to_ix = self.ans_to_ix
@@ -211,7 +211,7 @@ class DataSet(Data.Dataset):
 
                 return ans_score, abs_score, (abs_group, ans_group)
 
-        return ans_score, abs_score,\ 
+        return ans_score, abs_score,\
                (np.zeros(abs_to_ix.__len__(), np.bool),\
                 np.ones(ans_to_ix.__len__(), np.bool))
 
