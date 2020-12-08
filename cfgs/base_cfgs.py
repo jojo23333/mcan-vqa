@@ -44,7 +44,12 @@ class Cfgs(PATH):
         # Print loss every step
         self.VERBOSE = True
 
+        # TODO
+        self.LOG_CYCLE = 100
 
+        self.ABS_ALPHA = 0.1
+
+        self.LOSS_TYPE = "abs_bce"
         # ------------------------------
         # ---- Data Provider Params ----
         # ------------------------------

@@ -16,7 +16,7 @@ import numpy as np
 import torch.nn as nn
 import torch.utils.data as Data
 
-from core.utils import align_and_update_state_dicts, get_loss
+from core.utils import align_and_update_state_dicts, get_loss, TrainLossMeter
 
 
 class Execution:
@@ -131,7 +131,8 @@ class Execution:
         # Training script
         print("begin training", flush=True)
         for epoch in range(start_epoch, self.__C.MAX_EPOCH):
-
+            # TODO add meter here
+            meter = TrainLossMeter()
             # Save log information
             logfile = open(
                 self.__C.LOG_PATH +
@@ -204,8 +205,8 @@ class Execution:
                     loss_ans, loss_abs = get_loss(pred, pred_abs, 
                                                   sub_ans_iter, sub_abs_iter, 
                                                   sub_mask_ans, sub_mask_abs, 
-                                                  loss_fn)
-                    loss = loss_ans + loss_abs
+                                                  loss_fn, self.__C.LOSS_TYPE)
+                    loss = loss_ans + loss_abs * self.__C.ABS_ALPHA
                     # loss = loss_fn(pred, sub_ans_iter)
 
                     # only mean-reduction needs be divided by grad_accu_steps
@@ -214,26 +215,26 @@ class Execution:
                     loss /= self.__C.GRAD_ACCU_STEPS
                     loss.backward()
                     loss_sum += loss.cpu().data.numpy() * self.__C.GRAD_ACCU_STEPS
+                    meter.update({"loss_ans":loss_ans.cpu().item(),
+                                  "loss_abs":loss_abs.cpu().item()})
 
-                    # TODO ADD things here
-                    if self.__C.VERBOSE:
+                    # TODO ADD PERIODIC PRINT
+                    if step % self.__C.LOG_CYCLE == self.__C.LOG_CYCLE - 1:
                         if dataset_eval is not None:
                             mode_str = self.__C.SPLIT['train'] + '->' + self.__C.SPLIT['val']
                         else:
                             mode_str = self.__C.SPLIT['train'] + '->' + self.__C.SPLIT['test']
 
-                        print("\r[version %s][epoch %2d][step %4d/%4d][%s] loss: %.4f loss ans: %.4f loss abs: %.4f,, lr: %.2e" % (
+                        print("\r[version %s][epoch %2d][step %4d/%4d][%s] lr: %.2e loss: %s " % (
                             self.__C.VERSION,
                             epoch + 1,
                             step,
                             int(data_size / self.__C.BATCH_SIZE),
                             mode_str,
-                            loss.cpu().data.numpy(),
-                            loss_ans.cpu().data.numpy(),
-                            loss_abs.cpu().data.numpy(),
+                            optim._rate,
+                            meter.log_iter()
                             # loss.cpu().data.numpy() / self.__C.SUB_BATCH_SIZE,
-                            optim._rate
-                        ), end='          ')
+                        ), flush=True)
 
                 # Gradient norm clipping
                 if self.__C.GRAD_NORM_CLIP > 0:
@@ -256,6 +257,12 @@ class Execution:
 
             time_end = time.time()
             print('Finished in {}s'.format(int(time_end-time_start)))
+            print("\r[version %s][epoch %2d] lr: %.2e loss: %s " % (
+                self.__C.VERSION,
+                epoch + 1,
+                optim._rate,
+                meter.log_epoch()
+            ), flush=True)
 
             # print('')
             epoch_finish = epoch + 1

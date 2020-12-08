@@ -6,20 +6,24 @@ import torch
 def get_loss(pred, pred_abs, 
              gt_ans, gt_abs, 
              mask_ans, mask_abs, 
-             loss_fn):
+             loss_fn, loss_type="abs_bce"):
     '''
         abs_group batch_size * N list
         loss_fn should use mean reduction
     '''
+    if loss_type = "mcan":
+        loss_ans = loss_fn(pred, gt_ans)
+        return loss_ans, torch.tensor(0.)
+    elif loss_type = "abs_bce":
+        s_pred_ans = torch.masked_select(pred, mask_ans)
+        s_gt_ans   = torch.masked_select(gt_ans, mask_ans)
+        loss_ans = loss_fn(s_pred_ans, s_gt_ans)
 
-    s_pred_ans = torch.masked_select(pred, mask_ans)
-    s_gt_ans   = torch.masked_select(gt_ans, mask_ans)
-    loss_ans = loss_fn(s_pred_ans, s_gt_ans)
-
-    s_pred_abs = torch.masked_select(pred_abs, mask_abs)
-    s_gt_bas   = torch.masked_select(gt_abs, mask_abs)
-    loss_abs = loss_fn(s_pred_abs, s_gt_bas)
-    return loss_ans, loss_abs
+        s_pred_abs = torch.masked_select(pred_abs, mask_abs)
+        s_gt_bas   = torch.masked_select(gt_abs, mask_abs)
+        loss_abs = loss_fn(s_pred_abs, s_gt_bas)
+        return loss_ans, loss_abs
+    
 
 
     # losses_ans = []
@@ -145,3 +149,36 @@ def align_and_update_state_dicts(model_state_dict, ckpt_state_dict):
         print(
             get_unexpected_parameters_message(original_keys[x] for x in unmatched_ckpt_keys)
         )
+
+import numpy as np
+class TrainLossMeter(object):
+    def __init__(self):
+        self.total_steps = 0
+    
+    def init_meter(self, loss_keys):
+        self.loss_dict = {x:[] for x in loss_keys}
+        self.loss_sum  = {x:0 for x in loss_keys}
+
+    def update_iter(self, d):
+        losses = d#d["losses"]
+        if self.total_steps == 0:
+            self.init_meter(losses.keys())
+        
+        for x in losses:
+            self.loss_dict[x].append(losses[x])
+            self.loss_sum[x] += losses[x]
+        self.total_steps += 1
+
+    def log_iter(self):
+        loss_str = ""
+        for x in self.loss_dict:
+            loss_str = loss_str + f"{x}: {np.mean(self.loss_dict[x])} "
+            self.loss_dict[x].clear()
+        return loss_str
+
+    def log_epoch(self):
+        loss_str = ""
+        for x in self.loss_sum:
+            loss_str = loss_str + f"{x}: {self.loss_sum[x]/self.total_steps} "
+            self.loss_dict[x].clear()
+        return loss_str
