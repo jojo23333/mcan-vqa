@@ -114,6 +114,10 @@ def parse_args():
                       help='bottom up features root path',
                       type=str)
 
+    parser.add_argument('--LOSS_TYPE', dest='LOSS_TYPE',
+                      help='loss type',
+                      type=str)
+
     args = parser.parse_args()
     return args
 

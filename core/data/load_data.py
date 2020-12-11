@@ -228,7 +228,7 @@ class DataSet(Data.Dataset):
 
         def dfs_search(current_node, path, tree):
             # if not leaf node yet
-            print(f"Processing node: {current_node}:{path}")
+            # print(f"Processing node: {current_node}:{path}")
             if current_node in tree:
                 print(f"Processing node: {current_node}:{path}")
                 for child in tree[current_node]:

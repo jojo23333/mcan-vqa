@@ -45,9 +45,9 @@ class Cfgs(PATH):
         self.VERBOSE = True
 
         # TODO
-        self.LOG_CYCLE = 100
+        self.LOG_CYCLE = 200
 
-        self.ABS_ALPHA = 0.1
+        self.ABS_ALPHA = 0.01
 
         self.LOSS_TYPE = "abs_bce"
         # ------------------------------

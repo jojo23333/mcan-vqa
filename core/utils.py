@@ -11,10 +11,10 @@ def get_loss(pred, pred_abs,
         abs_group batch_size * N list
         loss_fn should use mean reduction
     '''
-    if loss_type = "mcan":
+    if loss_type == "mcan":
         loss_ans = loss_fn(pred, gt_ans)
         return loss_ans, torch.tensor(0.)
-    elif loss_type = "abs_bce":
+    elif loss_type == "abs_bce":
         s_pred_ans = torch.masked_select(pred, mask_ans)
         s_gt_ans   = torch.masked_select(gt_ans, mask_ans)
         loss_ans = loss_fn(s_pred_ans, s_gt_ans)

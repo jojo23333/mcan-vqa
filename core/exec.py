@@ -129,6 +129,7 @@ class Execution:
             )
 
         # Training script
+        logfile_iter = open(self.__C.LOG_PATH + 'log_run_' + self.__C.VERSION + '_iter.txt', 'a+')
         print("begin training", flush=True)
         for epoch in range(start_epoch, self.__C.MAX_EPOCH):
             # TODO add meter here
@@ -215,7 +216,8 @@ class Execution:
                     loss /= self.__C.GRAD_ACCU_STEPS
                     loss.backward()
                     loss_sum += loss.cpu().data.numpy() * self.__C.GRAD_ACCU_STEPS
-                    meter.update({"loss_ans":loss_ans.cpu().item(),
+                    meter.update_iter({"loss":loss.cpu().item(),
+                                  "loss_ans":loss_ans.cpu().item(),
                                   "loss_abs":loss_abs.cpu().item()})
 
                     # TODO ADD PERIODIC PRINT
@@ -225,16 +227,17 @@ class Execution:
                         else:
                             mode_str = self.__C.SPLIT['train'] + '->' + self.__C.SPLIT['test']
 
-                        print("\r[version %s][epoch %2d][step %4d/%4d][%s] lr: %.2e loss: %s " % (
+                        info_str = "[%s][version %s][epoch %2d][step %4d/%4d][%s] lr: %.2e %s " % (
+                            datetime.datetime.now().strftime("%y/%m/%d, %H:%M:%S"),
                             self.__C.VERSION,
                             epoch + 1,
                             step,
                             int(data_size / self.__C.BATCH_SIZE),
                             mode_str,
                             optim._rate,
-                            meter.log_iter()
-                            # loss.cpu().data.numpy() / self.__C.SUB_BATCH_SIZE,
-                        ), flush=True)
+                            meter.log_iter())
+                        print(info_str, flush=True)
+                        logfile_iter.write(info_str)
 
                 # Gradient norm clipping
                 if self.__C.GRAD_NORM_CLIP > 0:
@@ -257,12 +260,13 @@ class Execution:
 
             time_end = time.time()
             print('Finished in {}s'.format(int(time_end-time_start)))
-            print("\r[version %s][epoch %2d] lr: %.2e loss: %s " % (
+            info_str = "[version %s][epoch %2d] lr: %.2e loss: %s " % (
                 self.__C.VERSION,
                 epoch + 1,
                 optim._rate,
-                meter.log_epoch()
-            ), flush=True)
+                meter.log_epoch())
+            print(info_str, flush=True)
+            logfile_iter.write(info_str)
 
             # print('')
             epoch_finish = epoch + 1
