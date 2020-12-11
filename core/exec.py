@@ -16,7 +16,7 @@ import numpy as np
 import torch.nn as nn
 import torch.utils.data as Data
 
-from core.utils import align_and_update_state_dicts, get_loss, TrainLossMeter
+from core.utils import align_and_update_state_dicts, TrainLossMeter, HierarchicClassification
 
 
 class Execution:
@@ -33,6 +33,8 @@ class Execution:
 
             print('Loading validation set for per-epoch evaluation ........')
             self.dataset_eval = DataSet(__C_eval)
+        
+        self.h_classifier = HierarchicClassification(__C)
 
 
     def train(self, dataset, dataset_eval=None):
@@ -201,12 +203,12 @@ class Execution:
                         sub_img_feat_iter,
                         sub_ques_ix_iter
                     )
-
                     # TODO loss of pred_parent and pred based on gt path
-                    loss_ans, loss_abs = get_loss(pred, pred_abs, 
+                    loss_ans, loss_abs = self.h_classifier.get_loss(
+                                                  pred, pred_abs, 
                                                   sub_ans_iter, sub_abs_iter, 
                                                   sub_mask_ans, sub_mask_abs, 
-                                                  loss_fn, self.__C.LOSS_TYPE)
+                                                  loss_fn)
                     loss = loss_ans + loss_abs * self.__C.ABS_ALPHA
                     # loss = loss_fn(pred, sub_ans_iter)
 
@@ -301,12 +303,12 @@ class Execution:
             logfile.close()
 
             # Eval after every epoch
-            #if dataset_eval is not None:
-            #    self.eval(
-            #        dataset_eval,
-            #        state_dict=net.state_dict(),
-            #        valid=True
-            #    )
+            if dataset_eval is not None:
+               self.eval(
+                   dataset_eval,
+                   state_dict=net.state_dict(),
+                   valid=True
+               )
 
             # if self.__C.VERBOSE:
             #     logfile = open(
@@ -395,10 +397,12 @@ class Execution:
             img_feat_iter = img_feat_iter.cuda()
             ques_ix_iter = ques_ix_iter.cuda()
 
-            pred = net(
+            pred, pred_abs = net(
                 img_feat_iter,
                 ques_ix_iter
             )
+            pred, _ = self.h_classifier.get_abs_masked_pred(pred, pred_abs)
+            # acc_abs, recall_abs = self.h_classifier.inference_abs()
             pred_np = pred.cpu().data.numpy()
             pred_argmax = np.argmax(pred_np, axis=1)
 

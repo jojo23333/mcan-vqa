@@ -3,27 +3,118 @@ import logging
 import re
 import torch
 
-def get_loss(pred, pred_abs, 
-             gt_ans, gt_abs, 
-             mask_ans, mask_abs, 
-             loss_fn, loss_type="abs_bce"):
-    '''
-        abs_group batch_size * N list
-        loss_fn should use mean reduction
-    '''
-    if loss_type == "mcan":
-        loss_ans = loss_fn(pred, gt_ans)
-        return loss_ans, torch.tensor(0.)
-    elif loss_type == "abs_bce":
-        s_pred_ans = torch.masked_select(pred, mask_ans)
-        s_gt_ans   = torch.masked_select(gt_ans, mask_ans)
-        loss_ans = loss_fn(s_pred_ans, s_gt_ans)
+from core.data.data_utils import ans_stat
 
-        s_pred_abs = torch.masked_select(pred_abs, mask_abs)
-        s_gt_bas   = torch.masked_select(gt_abs, mask_abs)
-        loss_abs = loss_fn(s_pred_abs, s_gt_bas)
-        return loss_ans, loss_abs
+
+class HierarchicClassification(object):
+    def __init__(self, __C):
+        self.__C = __C
+        self.loss_type = __C.LOSS_TYPE
+        self.ans_to_ix, self.ix_to_ans = ans_stat('core/data/answer_dict.json')
+        self.init_abs_tree()
+        self.init_tree_matrix()
+
+    def get_loss(self, pred, pred_abs, gt_ans, gt_abs, mask_ans, mask_abs, loss_fn):
+        '''
+            abs_group batch_size * N list
+            loss_fn should use mean reduction
+        '''
+        if self.__C.USE_ABS_MASKED_PRED:
+            pred, _ = self.get_abs_masked_pred(pred, pred_abs)
+
+        if self.loss_type == "mcan":
+            loss_ans = loss_fn(pred, gt_ans)
+            return loss_ans, torch.tensor(0.)
+        elif self.loss_type == "abs_bce":
+            s_pred_ans = torch.masked_select(pred, mask_ans)
+            s_gt_ans   = torch.masked_select(gt_ans, mask_ans)
+            loss_ans = loss_fn(s_pred_ans, s_gt_ans)
+
+            s_pred_abs = torch.masked_select(pred_abs, mask_abs)
+            s_gt_abs   = torch.masked_select(gt_abs, mask_abs)
+            loss_abs = loss_fn(s_pred_abs, s_gt_abs)
+            return loss_ans, loss_abs
+        elif self.loss_type == "all_bce":
+            loss_ans = loss_fn(pred_ans, gt_ans)
+            loss_abs = loss_fn(pred_abs, gt_abs)
+            return loss_ans, loss_abs
+            
     
+    def inference_abs(self, pred_abs, gt_abs):
+        prediction = pred_abs > 0.5
+        p_all = prediction.sum()
+        gt_all = gt_abs.sum()
+        tp = torch.masked_select(prediction, gt_abs).sum()
+        precision = tp / p_all
+        recall = tp / gt_all
+        return precision, recall
+
+    def get_abs_masked_pred(self, pred, pred_abs):
+        '''
+            tree: num_abs, num_pred
+            layers: list of list like [[1,2],[3,4,5,6]] 
+        '''
+        # abs_masks: (batch, num_abs, num_pred)
+        abs_masks = pred_abs.unsqueeze(-1) * self.tree_matrix.unsqueeze(0)
+        abs_masks_by_layer = []
+        for layer in layers:
+            abs_masks_by_layer.append(
+                abs_masks[layer].sum(dim=1)
+            )
+        abs_masks_by_layer = torch.stack(abs_masks_by_layer, dim=1)
+        # do production along the depth direction 
+        # abs_maks: (batch, num_pred)
+        abs_mask = torch.prod(abs_masks_by_layer, dim=1)
+        masked_pred = pred * abs_mask
+        return masked_pred, abs_mask
+    
+    def init_tree_matrix(self):
+        '''
+            return (number_of_abs_node, number_of_leaf)
+        '''
+        tree_matrix = np.zeros(self.abs_to_ix.__len__(), self.ans_to_ix.__len__())
+        for ans_ in self.ans_to_ix.keys():
+            ans_id = self.ans_to_ix(ans_)
+            abspath = self.ans_to_abspath[x]
+            for abs_ in abspath[1:]:
+                abs_id = self.abs_to_ix(abs_)
+                tree_matrix[abs_id, ans_id] = 1.0
+        self.tree_matrix = torch.from_numpy(tree_matrix)
+        return tree_matrix
+
+    def init_abs_tree(self):
+        with open('core/data/answer_dict_hierarchical.json', 'r') as f:
+            data = json.load(f)
+        # edge link of the abs tree
+        self.abs_tree = data['tree_dict']
+        # list of id from abs to ix
+        self.abs_to_ix =  data['abs_dict']
+        # given ans, give all possible nodes of path to the ans, the first comonent is always '_root'
+        self.ans_to_abspath = {x:[] for x in self.ans_to_ix.keys()}
+
+        layers = []
+        def dfs_search(current_node, path, tree, d):
+            # if not leaf node yey
+            if current_node in tree:
+                print(f"Processing node: {current_node}:{path}")
+                if layer > 0:
+                    if len(layers) < d:
+                        layers.append([current_node])
+                    else:
+                        layers[d-1].append(current_node)
+                for child in tree[current_node]:
+                    dfs_search(child, path+[current_node], tree, d+1)
+            else:
+                for x in path:
+                    if x not in self.ans_to_abspath[current_node]:
+                        self.ans_to_abspath[current_node].append(x)
+        dfs_search('_rt', [], self.abs_tree)
+        self.layers = [
+            torch.new_tensor([self.abs_to_ix(abs_) for abs_ in abs_nodes])
+            for abs_nodes in layers
+        ]
+        
+        print("Processing of tree finished")
 
 
     # losses_ans = []

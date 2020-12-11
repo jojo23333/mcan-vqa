@@ -50,6 +50,8 @@ class Cfgs(PATH):
         self.ABS_ALPHA = 0.01
 
         self.LOSS_TYPE = "abs_bce"
+
+        self.USE_ABS_MASKED_PRED = True
         # ------------------------------
         # ---- Data Provider Params ----
         # ------------------------------
