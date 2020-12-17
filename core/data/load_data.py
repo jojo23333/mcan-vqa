@@ -59,7 +59,7 @@ class DataSet(Data.Dataset):
         split_list = __C.SPLIT[__C.RUN_MODE].split('+')
         for split in split_list:
             self.ques_list += json.load(open(__C.QUESTION_PATH[split], 'r'))['questions']
-            if __C.RUN_MODE in ['train']:
+            if __C.RUN_MODE in ['train', 'val']:
                 self.ans_list += json.load(open(__C.ANSWER_PATH[split], 'r'))['annotations']
 
         # Define run data size
@@ -120,9 +120,11 @@ class DataSet(Data.Dataset):
         img_feat_iter = np.zeros(1)
         ques_ix_iter = np.zeros(1)
         ans_iter = np.zeros(1)
+        abs_iter = np.zeros(1)
+        loss_masks = np.zeros(1)
 
         # Process ['train'] and ['val', 'test'] respectively
-        if self.__C.RUN_MODE in ['train']:
+        if self.__C.RUN_MODE in ['train', 'val']:
             # Load the run data from list
             ans = self.ans_list[idx]
             ques = self.qid_to_ques[str(ans['question_id'])]

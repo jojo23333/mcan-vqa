@@ -2,6 +2,7 @@ import copy
 import logging
 import re
 import torch
+import json
 
 from core.data.data_utils import ans_stat
 
@@ -13,6 +14,8 @@ class HierarchicClassification(object):
         self.ans_to_ix, self.ix_to_ans = ans_stat('core/data/answer_dict.json')
         self.init_abs_tree()
         self.init_tree_matrix()
+        self.layers = [x.cuda() for x in self.layers]
+        self.tree_matrix = self.tree_matrix.cuda()
 
     def get_loss(self, pred, pred_abs, gt_ans, gt_abs, mask_ans, mask_abs, loss_fn):
         '''
@@ -35,7 +38,7 @@ class HierarchicClassification(object):
             loss_abs = loss_fn(s_pred_abs, s_gt_abs)
             return loss_ans, loss_abs
         elif self.loss_type == "all_bce":
-            loss_ans = loss_fn(pred_ans, gt_ans)
+            loss_ans = loss_fn(pred, gt_ans)
             loss_abs = loss_fn(pred_abs, gt_abs)
             return loss_ans, loss_abs
             
@@ -56,13 +59,18 @@ class HierarchicClassification(object):
         '''
         # abs_masks: (batch, num_abs, num_pred)
         abs_masks = pred_abs.unsqueeze(-1) * self.tree_matrix.unsqueeze(0)
+        #print(abs_masks.shape)
         abs_masks_by_layer = []
-        for layer in layers:
+        for layer in self.layers:
+            layer_cnt = self.tree_matrix[layer, :].sum(dim=0, keepdim=True)
+            assert (layer_cnt > 0).all(), "layer not covering all leafs"
             abs_masks_by_layer.append(
-                abs_masks[layer].sum(dim=1)
+                    abs_masks[:, layer, :].sum(dim=1) / layer_cnt
             )
-        abs_masks_by_layer = torch.stack(abs_masks_by_layer, dim=1)
+        # for multi-layer tree structure
         # do production along the depth direction 
+        abs_masks_by_layer = torch.stack(abs_masks_by_layer, dim=1)
+        assert (abs_masks_by_layer <= 1.0).all(), "mask exceed 1.0!"
         # abs_maks: (batch, num_pred)
         abs_mask = torch.prod(abs_masks_by_layer, dim=1)
         masked_pred = pred * abs_mask
@@ -72,12 +80,12 @@ class HierarchicClassification(object):
         '''
             return (number_of_abs_node, number_of_leaf)
         '''
-        tree_matrix = np.zeros(self.abs_to_ix.__len__(), self.ans_to_ix.__len__())
+        tree_matrix = np.zeros((self.abs_to_ix.__len__(), self.ans_to_ix.__len__()), dtype=np.float32)
         for ans_ in self.ans_to_ix.keys():
-            ans_id = self.ans_to_ix(ans_)
-            abspath = self.ans_to_abspath[x]
+            ans_id = self.ans_to_ix[ans_]
+            abspath = self.ans_to_abspath[ans_]
             for abs_ in abspath[1:]:
-                abs_id = self.abs_to_ix(abs_)
+                abs_id = self.abs_to_ix[abs_]
                 tree_matrix[abs_id, ans_id] = 1.0
         self.tree_matrix = torch.from_numpy(tree_matrix)
         return tree_matrix
@@ -97,7 +105,7 @@ class HierarchicClassification(object):
             # if not leaf node yey
             if current_node in tree:
                 print(f"Processing node: {current_node}:{path}")
-                if layer > 0:
+                if d > 0:
                     if len(layers) < d:
                         layers.append([current_node])
                     else:
@@ -108,9 +116,9 @@ class HierarchicClassification(object):
                 for x in path:
                     if x not in self.ans_to_abspath[current_node]:
                         self.ans_to_abspath[current_node].append(x)
-        dfs_search('_rt', [], self.abs_tree)
+        dfs_search('_rt', [], self.abs_tree, 0)
         self.layers = [
-            torch.new_tensor([self.abs_to_ix(abs_) for abs_ in abs_nodes])
+            torch.tensor([self.abs_to_ix[abs_] for abs_ in abs_nodes])
             for abs_nodes in layers
         ]
         

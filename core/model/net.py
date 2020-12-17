@@ -59,7 +59,7 @@ class AttFlat(nn.Module):
 # -------------------------
 
 class Net(nn.Module):
-    def __init__(self, __C, pretrained_emb, token_size, answer_size, num_of_abstraction=3):
+    def __init__(self, __C, pretrained_emb, token_size, answer_size, num_of_abstraction=4):
         super(Net, self).__init__()
 
         self.embedding = nn.Embedding(

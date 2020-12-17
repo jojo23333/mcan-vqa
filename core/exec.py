@@ -262,7 +262,7 @@ class Execution:
 
             time_end = time.time()
             print('Finished in {}s'.format(int(time_end-time_start)))
-            info_str = "[version %s][epoch %2d] lr: %.2e loss: %s " % (
+            info_str = "[version %s][epoch %2d] lr: %.2e loss: %s\n" % (
                 self.__C.VERSION,
                 epoch + 1,
                 optim._rate,
@@ -295,7 +295,7 @@ class Execution:
             )
             logfile.write(
                 'epoch = ' + str(epoch_finish) +
-                '  loss = ' + str(loss_sum / data_size) +
+                '  loss = ' + str(loss_sum) +
                 '\n' +
                 'lr = ' + str(optim._rate) +
                 '\n\n'
@@ -387,7 +387,9 @@ class Execution:
         for step, (
                 img_feat_iter,
                 ques_ix_iter,
-                ans_iter
+                ans_iter,
+                abs_iter,
+                loss_mask,
         ) in enumerate(dataloader):
             print("\rEvaluation: [step %4d/%4d]" % (
                 step,
@@ -401,6 +403,7 @@ class Execution:
                 img_feat_iter,
                 ques_ix_iter
             )
+            # pred, _ = self.h_classifier.get_abs_masked_pred(pred, abs_iter.cuda())
             pred, _ = self.h_classifier.get_abs_masked_pred(pred, pred_abs)
             # acc_abs, recall_abs = self.h_classifier.inference_abs()
             pred_np = pred.cpu().data.numpy()

@@ -45,9 +45,9 @@ class Cfgs(PATH):
         self.VERBOSE = True
 
         # TODO
-        self.LOG_CYCLE = 200
+        self.LOG_CYCLE = 400
 
-        self.ABS_ALPHA = 0.01
+        self.ABS_ALPHA = 0.005
 
         self.LOSS_TYPE = "abs_bce"
 
@@ -160,10 +160,10 @@ class Cfgs(PATH):
         self.LR_DECAY_R = 0.2
 
         # Learning rate decay at {x, y, z...} epoch
-        self.LR_DECAY_LIST = [10, 12]
+        self.LR_DECAY_LIST = [10, 11]
 
         # Max training epoch
-        self.MAX_EPOCH = 13
+        self.MAX_EPOCH = 20
 
         # Gradient clip
         # (default: -1 means not using)
