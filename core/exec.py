@@ -83,12 +83,12 @@ class Execution:
             ckpt = torch.load(path)
             print('Finish!')
             # TODO muchen: load part of the model based on the original model
-            model_state_dict = net.state_dict()
-            align_and_update_state_dicts(
-                model_state_dict,
-                ckpt['state_dict']
-            )
-            #net.load_state_dict(ckpt['state_dict'])
+            # model_state_dict = net.state_dict()
+            # align_and_update_state_dicts(
+            #     model_state_dict,
+            #     ckpt['state_dict']
+            # )
+            net.load_state_dict(ckpt['state_dict'])
 
             # Load the optimizer paramters
             optim = get_optim(self.__C, net, data_size, ckpt['lr_base'])

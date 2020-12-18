@@ -87,6 +87,7 @@ class Net(nn.Module):
 
         self.attflat_img = AttFlat(__C)
         self.attflat_lang = AttFlat(__C)
+        self.attflat_abs = AttFlat(__C)
 
         self.proj_norm = LayerNorm(__C.FLAT_OUT_SIZE)
         self.proj = nn.Linear(__C.FLAT_OUT_SIZE, answer_size)
@@ -115,6 +116,11 @@ class Net(nn.Module):
             img_feat_mask
         )
 
+        abs_feat = self.attflat_abs(
+            lang_feat,
+            lang_feat_mask
+        )
+
         lang_feat = self.attflat_lang(
             lang_feat,
             lang_feat_mask
@@ -125,7 +131,7 @@ class Net(nn.Module):
             img_feat_mask
         )
         # TODO: use lang feature alone to predict hirachical tree for 
-        abs_feat = self.proj_norm(lang_feat)
+        abs_feat = self.proj_norm(abs_feat)
         abs_feat = torch.sigmoid(self.proj_abs(abs_feat))
 
         proj_feat = lang_feat + img_feat

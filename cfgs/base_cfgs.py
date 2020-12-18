@@ -47,7 +47,7 @@ class Cfgs(PATH):
         # TODO
         self.LOG_CYCLE = 400
 
-        self.ABS_ALPHA = 0.005
+        self.ABS_ALPHA = 0.000
 
         self.LOSS_TYPE = "abs_bce"
 
