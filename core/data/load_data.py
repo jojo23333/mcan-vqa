@@ -69,8 +69,6 @@ class DataSet(Data.Dataset):
             self.data_size = self.ques_list.__len__()
 
         print('== Dataset size:', self.data_size)
-
-
         # ------------------------
         # ---- Data statistic ----
         # ------------------------
@@ -88,11 +86,6 @@ class DataSet(Data.Dataset):
         # {question id} -> {question}
         self.qid_to_ques = ques_load(self.ques_list)
 
-        # Tokenize
-        self.token_to_ix, self.pretrained_emb = tokenize(self.stat_ques_list, __C.USE_GLOVE)
-        self.token_size = self.token_to_ix.__len__()
-        print('== Question token vocab size:', self.token_size)
-
         # Answers statistic
         # Make answer dict during training does not guarantee
         # the same order of {ans_to_ix}, so we published our
@@ -109,9 +102,25 @@ class DataSet(Data.Dataset):
         print('Finished!')
         print('')
 
-        
+        # Tokenize for both questions and answers
+        ques_ans_list = self.stat_ques_list + list(self.ans_to_ix.keys())
+        self.token_to_ix, self.pretrained_emb = tokenize(ques_ans_list, __C.USE_GLOVE)
+        self.token_size = self.token_to_ix.__len__()
+        print('== Question token vocab size:', self.token_size)
+
         # TODO
         self.init_abs_tree()
+
+    def get_ans_ix(self):
+        """
+            Get answer embeddings in the same token embedding as questions
+        """
+        ans_embedding_ixs = []
+        answers = [self.ix_to_ans[i] for i in range(len(self.ix_to_ans.keys()))]
+        for ans in answers:
+            ans_embedding_ixs.append(proc_ques(ans, self.token_to_ix, 4))
+        ans_embedding_ixs = np.stack(ans_embedding_ixs)
+        return torch.from_numpy(ans_embedding_ixs)
 
     # TODO modify dataloader and return gt abstractions and node groups for computing loss
     def __getitem__(self, idx):

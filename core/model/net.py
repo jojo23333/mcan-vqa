@@ -95,7 +95,9 @@ class Net(nn.Module):
         self.proj_abs = nn.Linear(__C.FLAT_OUT_SIZE, num_of_abstraction)
 
 
-    def forward(self, img_feat, ques_ix):
+    def forward(self, input_dict):#img_feat, ques_ix):
+        img_feat = input_dict['img_feat']
+        ques_ix = input_dict['ques_ix']
 
         # Make mask
         lang_feat_mask = self.make_mask(ques_ix.unsqueeze(2))

@@ -6,6 +6,7 @@
 
 from core.data.load_data import DataSet
 from core.model.net import Net
+from core.model.Qnet import Net_QClassifier
 from core.model.optim import get_optim, adjust_lr
 from core.data.data_utils import shuffle_list
 from utils.vqa import VQA
@@ -44,16 +45,28 @@ class Execution:
         token_size = dataset.token_size
         ans_size = dataset.ans_size
         pretrained_emb = dataset.pretrained_emb
+        # TODO: answer embedding things:
+        ans_ix = dataset.get_ans_ix()
 
         # Define the MCAN model
-        net = Net(
-            self.__C,
-            pretrained_emb,
-            token_size,
-            ans_size
-        )
-        net.cuda()
-        net.train()
+        if self.__C.MODEL == 'q_small':
+            net = Net_QClassifier(
+                self.__C,
+                pretrained_emb,
+                token_size,
+                ans_size
+            )
+            net.cuda()
+            net.train()
+        else:
+            net = Net(
+                self.__C,
+                pretrained_emb,
+                token_size,
+                ans_size
+            )
+            net.cuda()
+            net.train()
 
         # Define the multi-gpu training if needed
         if self.__C.N_GPU > 1:
@@ -61,8 +74,8 @@ class Execution:
 
         # Define the binary cross entropy loss
         # loss_fn = torch.nn.BCELoss(size_average=False).cuda()
-        # loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
-        loss_fn = torch.nn.BCELoss(reduction='mean').cuda()
+        loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
+        # loss_fn = torch.nn.BCELoss(reduction='mean').cuda()
 
         # Load checkpoint if resume training
         if self.__C.RESUME:
@@ -198,10 +211,15 @@ class Execution:
                         mask_ans[accu_step * self.__C.SUB_BATCH_SIZE:
                                  (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
 
+                    input_dict = {
+                        "img_feat": sub_img_feat_iter, 
+                        "ques_ix": sub_ques_ix_iter,
+                        "ans_ix": ans_ix
+                    }
+
                     # TODO get pred and pred_parent
                     pred, pred_abs = net(
-                        sub_img_feat_iter,
-                        sub_ques_ix_iter
+                        input_dict
                     )
                     # TODO loss of pred_parent and pred based on gt path
                     loss_ans, loss_abs = self.h_classifier.get_loss(
@@ -219,8 +237,8 @@ class Execution:
                     loss.backward()
                     loss_sum += loss.cpu().data.numpy() * self.__C.GRAD_ACCU_STEPS
                     meter.update_iter({"loss":loss.cpu().item(),
-                                  "loss_ans":loss_ans.cpu().item(),
-                                  "loss_abs":loss_abs.cpu().item()})
+                                   "loss_ans":loss_ans.cpu().item(),
+                                   "loss_abs":loss_abs.cpu().item()})
 
                     # TODO ADD PERIODIC PRINT
                     if step % self.__C.LOG_CYCLE == self.__C.LOG_CYCLE - 1:

@@ -21,7 +21,7 @@ def parse_args():
                       type=str, required=True)
 
     parser.add_argument('--MODEL', dest='MODEL',
-                      choices=['small', 'large'],
+                      choices=['small', 'large', 'q_small'],
                       help='{small, large}',
                       default='small', type=str)
 

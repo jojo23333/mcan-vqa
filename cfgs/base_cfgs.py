@@ -49,7 +49,7 @@ class Cfgs(PATH):
 
         self.ABS_ALPHA = 0.000
 
-        self.LOSS_TYPE = "abs_bce"
+        self.LOSS_TYPE = "all_bce"
 
         self.USE_ABS_MASKED_PRED = True
         # ------------------------------
@@ -77,7 +77,8 @@ class Cfgs(PATH):
         }
 
         # A external method to set train split
-        self.TRAIN_SPLIT = 'train+val+vg'
+        # self.TRAIN_SPLIT = 'train+val+vg' # Use val to evaluate more accurately
+        self.TRAIN_SPLIT = 'train'
 
         # Set True to use pretrained word embedding
         # (GloVe: spaCy https://spacy.io/)
@@ -160,10 +161,10 @@ class Cfgs(PATH):
         self.LR_DECAY_R = 0.2
 
         # Learning rate decay at {x, y, z...} epoch
-        self.LR_DECAY_LIST = [10, 11]
+        self.LR_DECAY_LIST = [10, 12]
 
         # Max training epoch
-        self.MAX_EPOCH = 20
+        self.MAX_EPOCH = 13
 
         # Gradient clip
         # (default: -1 means not using)
