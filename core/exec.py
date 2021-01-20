@@ -46,7 +46,8 @@ class Execution:
         ans_size = dataset.ans_size
         pretrained_emb = dataset.pretrained_emb
         # TODO: answer embedding things:
-        ans_ix = dataset.get_ans_ix()
+        ans_ix = dataset.get_ans_ix()[None,...].repeat(self.__C.BATCH_SIZE, 1, 1)
+        print(ans_ix.shape)
 
         # Define the MCAN model
         if self.__C.MODEL == 'q_small':
@@ -214,7 +215,7 @@ class Execution:
                     input_dict = {
                         "img_feat": sub_img_feat_iter, 
                         "ques_ix": sub_ques_ix_iter,
-                        "ans_ix": ans_ix
+                        "ans_ix": ans_ix.cuda()
                     }
 
                     # TODO get pred and pred_parent

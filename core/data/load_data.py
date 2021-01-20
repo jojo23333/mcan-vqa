@@ -116,7 +116,7 @@ class DataSet(Data.Dataset):
             Get answer embeddings in the same token embedding as questions
         """
         ans_embedding_ixs = []
-        answers = [self.ix_to_ans[i] for i in range(len(self.ix_to_ans.keys()))]
+        answers = [self.ix_to_ans[str(i)] for i in range(len(self.ix_to_ans.keys()))]
         for ans in answers:
             ans_embedding_ixs.append(proc_ques(ans, self.token_to_ix, 4))
         ans_embedding_ixs = np.stack(ans_embedding_ixs)

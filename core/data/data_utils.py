@@ -64,10 +64,14 @@ def tokenize(stat_ques_list, use_glove):
         pretrained_emb.append(spacy_tool('UNK').vector)
 
     for ques in stat_ques_list:
+        if isinstance(ques, str):
+            words = ques
+        else:
+            words = ques['question']
         words = re.sub(
             r"([.,'!?\"()*#:;])",
             '',
-            ques['question'].lower()
+            words.lower()
         ).replace('-', ' ').replace('/', ' ').split()
 
         for word in words:
@@ -132,10 +136,14 @@ def proc_img_feat(img_feat, img_feat_pad_size):
 def proc_ques(ques, token_to_ix, max_token):
     ques_ix = np.zeros(max_token, np.int64)
 
+    if isinstance(ques, str):
+        words = ques
+    else:
+        words = ques['question']
     words = re.sub(
         r"([.,'!?\"()*#:;])",
         '',
-        ques['question'].lower()
+        words.lower()
     ).replace('-', ' ').replace('/', ' ').split()
 
     for ix, word in enumerate(words):

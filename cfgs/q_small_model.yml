@@ -14,4 +14,5 @@ CKPT_EPOCH: 13
 LOSS_TYPE: 'mcan'
 USE_ABS_MASKED_PRED: False
 ABS_ALPHA: 0.00
+BATCH_SIZE: 16
 # Q stand for query based classifier

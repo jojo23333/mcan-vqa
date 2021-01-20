@@ -36,6 +36,8 @@ class TransformerDecoderLayer(nn.Module):
                 memory_key_padding_mask: Optional[Tensor] = None):
                 # pos: Optional[Tensor] = None,
                 # query_pos: Optional[Tensor] = None):
+        #print("tgt:", tgt.shape)
+        #print("memory", memory.shape)
         tgt = self.norm1(tgt)
         tgt2 = self.self_attn(tgt, tgt, tgt, attn_mask=tgt_mask,
                               key_padding_mask=tgt_key_padding_mask)[0]
@@ -53,6 +55,7 @@ class TransformerDecoderLayer(nn.Module):
 
 class Qclassifier(nn.Module):
     def __init__(self, __C, embedding):
+        super(Qclassifier, self).__init__()
         self.embedding = embedding
         self.lstm = torch.nn.LSTM(
             input_size = __C.WORD_EMBED_SIZE,
@@ -62,10 +65,10 @@ class Qclassifier(nn.Module):
         )
 
         # TODO:
-        NUM_DECODER_LAYER = 4
+        NUM_DECODER_LAYER = 2
         decoder_layer = TransformerDecoderLayer(d_model = __C.HIDDEN_SIZE,
-                                                nhead = 8,
-                                                dim_feedforward = 512)
+                                                nhead = 2,
+                                                dim_feedforward = 128)
         self.decoder_layers_img = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
         self.decoder_layers_ques = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
 
@@ -77,7 +80,8 @@ class Qclassifier(nn.Module):
         """
         ans_ix should be (NUM OF ANSWERS, LEN OF ANSWERS)
         """
-        ans_feat = self.embedding(ans_ix)
+        self.lstm.flatten_parameters()
+        ans_feat = self.embedding(ans_ix[0])
         ans_feat, _ = self.lstm(ans_feat)
         
         # only take the last output of lstm, could be changed later
@@ -86,17 +90,18 @@ class Qclassifier(nn.Module):
         # expand ans_feat
         batch_size = ques_feat.shape[0]
         ans_feat = ans_feat.repeat(batch_size, 1, 1)
+        #print(ans_feat.shape, img_feat.shape, ques_feat.shape)
 
         # decoder layers
-        tgt_img = ans_feat
+        tgt_img = ans_feat.transpose(0, 1)
         for layer in self.decoder_layers_img:
-            tgt_img = layer(tgt=tgt_img.transpose(0, 1), 
+            tgt_img = layer(tgt=tgt_img, 
                             memory=img_feat.transpose(0, 1),
                             memory_key_padding_mask=img_mask.squeeze())
 
-        tgt_ques = ans_feat
+        tgt_ques = ans_feat.transpose(0, 1)
         for layer in self.decoder_layers_ques:
-            tgt_ques = layer(tgt=tgt_ques.transpose(0, 1),
+            tgt_ques = layer(tgt=tgt_ques,
                              memory=ques_feat.transpose(0, 1),
                              memory_key_padding_mask=ques_mask.squeeze())
         
@@ -145,7 +150,7 @@ class Net_QClassifier(nn.Module):
         ques_ix = input_dict['ques_ix']
         ans_ix = input_dict['ans_ix']
 
-        assert ans_ix.size()[0] == self.answer_size
+        assert ans_ix.size()[1] == self.answer_size
 
         # Make mask
         lang_feat_mask = make_mask(ques_ix.unsqueeze(2))
@@ -166,7 +171,7 @@ class Net_QClassifier(nn.Module):
             img_feat_mask
         )
 
-        pred = self.head(ans_ix, lang_feat, img_feat)
+        pred = self.head(ans_ix, lang_feat, img_feat, lang_feat_mask, img_feat_mask)
         pred = torch.sigmoid(pred)
 
         return pred, None
