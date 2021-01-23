@@ -56,19 +56,12 @@ class TransformerDecoderLayer(nn.Module):
 class Qclassifier(nn.Module):
     def __init__(self, __C, embedding):
         super(Qclassifier, self).__init__()
-        self.embedding = embedding
-        self.lstm = torch.nn.LSTM(
-            input_size = __C.WORD_EMBED_SIZE,
-            hidden_size = __C.HIDDEN_SIZE,
-            num_layers=1,
-            batch_first=True
-        )
 
         # TODO:
         NUM_DECODER_LAYER = 2
         decoder_layer = TransformerDecoderLayer(d_model = __C.HIDDEN_SIZE,
                                                 nhead = 2,
-                                                dim_feedforward = 128)
+                                                dim_feedforward = 512)
         self.decoder_layers_img = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
         self.decoder_layers_ques = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
 
@@ -76,21 +69,16 @@ class Qclassifier(nn.Module):
         self.head_norm = nn.LayerNorm(__C.HIDDEN_SIZE)
         self.head = nn.Linear(__C.HIDDEN_SIZE, 1)
 
-    def forward(self, ans_ix, ques_feat, img_feat, ques_mask, img_mask):
+    def forward(self, ans_feat, ques_feat, img_feat, ques_mask, img_mask):
         """
-        ans_ix should be (NUM OF ANSWERS, LEN OF ANSWERS)
+        ans_feat should be (NUM OF ANSWERS, LEN OF ANSWERS)
         """
         self.lstm.flatten_parameters()
-        ans_feat = self.embedding(ans_ix[0])
-        ans_feat, _ = self.lstm(ans_feat)
-        
-        # only take the last output of lstm, could be changed later
-        ans_feat = ans_feat[None,:,-1,:]
 
         # expand ans_feat
         batch_size = ques_feat.shape[0]
         ans_feat = ans_feat.repeat(batch_size, 1, 1)
-        #print(ans_feat.shape, img_feat.shape, ques_feat.shape)
+        # print(ans_feat.shape, img_feat.shape, ques_feat.shape)
 
         # decoder layers
         tgt_img = ans_feat.transpose(0, 1)
@@ -135,6 +123,13 @@ class Net_QClassifier(nn.Module):
             batch_first=True
         )
 
+        self.lstm_ans = torch.nn.LSTM(
+            input_size = __C.WORD_EMBED_SIZE,
+            hidden_size = __C.HIDDEN_SIZE,
+            num_layers=1,
+            batch_first=True
+        )
+
         self.img_feat_linear = nn.Linear(
             __C.IMG_FEAT_SIZE,
             __C.HIDDEN_SIZE
@@ -171,7 +166,14 @@ class Net_QClassifier(nn.Module):
             img_feat_mask
         )
 
-        pred = self.head(ans_ix, lang_feat, img_feat, lang_feat_mask, img_feat_mask)
+        # get ans_feat
+        ans_feat = self.embedding(ans_ix[0])
+        ans_feat, _ = self.lstm_ans(ans_feat)
+        
+        # only take the last output of lstm, could be changed later
+        ans_feat = ans_feat[None,:,-1,:]
+
+        pred = self.head(ans_feat, lang_feat, img_feat, lang_feat_mask, img_feat_mask)
         pred = torch.sigmoid(pred)
 
         return pred, None
