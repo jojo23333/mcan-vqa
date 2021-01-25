@@ -58,7 +58,7 @@ class Qclassifier(nn.Module):
         super(Qclassifier, self).__init__()
 
         # TODO:
-        NUM_DECODER_LAYER = 2
+        NUM_DECODER_LAYER = 1
         decoder_layer = TransformerDecoderLayer(d_model = __C.HIDDEN_SIZE,
                                                 nhead = 2,
                                                 dim_feedforward = 512)
@@ -73,8 +73,6 @@ class Qclassifier(nn.Module):
         """
         ans_feat should be (NUM OF ANSWERS, LEN OF ANSWERS)
         """
-        self.lstm.flatten_parameters()
-
         # expand ans_feat
         batch_size = ques_feat.shape[0]
         ans_feat = ans_feat.repeat(batch_size, 1, 1)
@@ -167,6 +165,7 @@ class Net_QClassifier(nn.Module):
         )
 
         # get ans_feat
+        self.lstm_ans.flatten_parameters()
         ans_feat = self.embedding(ans_ix[0])
         ans_feat, _ = self.lstm_ans(ans_feat)
         
@@ -174,7 +173,6 @@ class Net_QClassifier(nn.Module):
         ans_feat = ans_feat[None,:,-1,:]
 
         pred = self.head(ans_feat, lang_feat, img_feat, lang_feat_mask, img_feat_mask)
-        pred = torch.sigmoid(pred)
 
         return pred, None
 
