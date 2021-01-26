@@ -53,15 +53,49 @@ class TransformerDecoderLayer(nn.Module):
         return tgt
 
 
+class DecoderLayerNoSelfAtt(nn.Module):
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
+        super(DecoderLayerNoSelfAtt, self).__init__()
+        self.multihead_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.linear2 = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.dropout3 = nn.Dropout(dropout)
+        self.activation = _get_activation_fn(activation)
+
+    def forward(self, tgt, memory,
+                tgt_mask: Optional[Tensor] = None,
+                memory_mask: Optional[Tensor] = None,
+                tgt_key_padding_mask: Optional[Tensor] = None,
+                memory_key_padding_mask: Optional[Tensor] = None):
+                # pos: Optional[Tensor] = None,
+                # query_pos: Optional[Tensor] = None):
+        tgt = self.norm1(tgt)
+        tgt2 = self.multihead_attn(tgt, memory, memory, attn_mask=memory_mask,
+                                   key_padding_mask=memory_key_padding_mask)[0]
+        tgt = tgt + self.dropout1(tgt2)
+        tgt = self.norm2(tgt)
+        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
+        tgt = tgt + self.dropout2(tgt2)
+        # tgt = self.norm3(tgt)
+        return tgt
+
+
 class Qclassifier(nn.Module):
     def __init__(self, __C, embedding):
         super(Qclassifier, self).__init__()
 
         # TODO:
-        NUM_DECODER_LAYER = 1
-        decoder_layer = TransformerDecoderLayer(d_model = __C.HIDDEN_SIZE,
-                                                nhead = 2,
-                                                dim_feedforward = 512)
+        NUM_DECODER_LAYER = 2
+        decoder_layer = DecoderLayerNoSelfAtt(d_model = __C.HIDDEN_SIZE,
+                                              nhead = 4,
+                                              dim_feedforward = 512)
         self.decoder_layers_img = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
         self.decoder_layers_ques = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
 
