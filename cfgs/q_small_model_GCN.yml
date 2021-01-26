@@ -15,5 +15,5 @@ LOSS_TYPE: 'mcan'
 USE_ABS_MASKED_PRED: False
 ABS_ALPHA: 0.00
 BATCH_SIZE: 16
-DECODER_CLASSIFIER: 'NoSelfAtt'
+DECODER_CLASSIFIER: 'GCN'
 # Q stand for query based classifier

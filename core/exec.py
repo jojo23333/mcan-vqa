@@ -50,7 +50,7 @@ class Execution:
         print(ans_ix.shape)
 
         # Define the MCAN model
-        if self.__C.MODEL == 'q_small':
+        if self.__C.MODEL.startswith('q_small'):
             net = Net_QClassifier(
                 self.__C,
                 pretrained_emb,
@@ -322,7 +322,7 @@ class Execution:
             logfile.close()
 
             # Eval after every epoch
-            if dataset_eval is not None:
+            if epoch % 2 == 0 and dataset_eval is not None:
                self.eval(
                    dataset_eval,
                    state_dict=net.state_dict(),
@@ -381,12 +381,25 @@ class Execution:
         ans_size = dataset.ans_size
         pretrained_emb = dataset.pretrained_emb
 
-        net = Net(
-            self.__C,
-            pretrained_emb,
-            token_size,
-            ans_size
-        )
+        # Define the MCAN model
+        if self.__C.MODEL.startswith('q_small'):
+            net = Net_QClassifier(
+                self.__C,
+                pretrained_emb,
+                token_size,
+                ans_size
+            )
+            net.cuda()
+            net.train()
+        else:
+            net = Net(
+                self.__C,
+                pretrained_emb,
+                token_size,
+                ans_size
+            )
+            net.cuda()
+            net.train()
         net.cuda()
         net.eval()
 

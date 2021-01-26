@@ -52,6 +52,8 @@ class Cfgs(PATH):
         self.LOSS_TYPE = "all_bce"
 
         self.USE_ABS_MASKED_PRED = True
+
+        self.DECODER_CLASSIFIER = 'NoSelfAtt' # 'NoSelfAtt', 'GCN'
         # ------------------------------
         # ---- Data Provider Params ----
         # ------------------------------
