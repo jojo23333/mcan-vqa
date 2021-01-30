@@ -184,16 +184,18 @@ class Qclassifier(nn.Module):
 
         # decoder layers
         tgt_img = ans_feat.transpose(0, 1)
+        img_mask = img_mask.view(batch_size, -1)
         for layer in self.decoder_layers_img:
             tgt_img = layer(tgt=tgt_img, 
                             memory=img_feat.transpose(0, 1),
-                            memory_key_padding_mask=img_mask.squeeze())
+                            memory_key_padding_mask=img_mask)
 
         tgt_ques = ans_feat.transpose(0, 1)
+        ques_mask = ques_mask.view(batch_size, -1)
         for layer in self.decoder_layers_ques:
             tgt_ques = layer(tgt=tgt_ques,
                              memory=ques_feat.transpose(0, 1),
-                             memory_key_padding_mask=ques_mask.squeeze())
+                             memory_key_padding_mask=ques_mask)
         
         # TODO: fuse from image and ques output
         tgt = tgt_ques + tgt_img

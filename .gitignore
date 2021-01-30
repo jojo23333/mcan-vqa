@@ -1,4 +1,5 @@
 .vscode
+slurm_logs/
 results/
 datasets/
 datasets

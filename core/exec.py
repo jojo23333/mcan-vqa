@@ -322,7 +322,7 @@ class Execution:
             logfile.close()
 
             # Eval after every epoch
-            if epoch % 2 == 0 and dataset_eval is not None:
+            if epoch % 3 == 2 and dataset_eval is not None:
                self.eval(
                    dataset_eval,
                    state_dict=net.state_dict(),
@@ -353,6 +353,7 @@ class Execution:
     # Evaluation
     def eval(self, dataset, state_dict=None, valid=False):
 
+        ans_ix = dataset.get_ans_ix()[None,...].repeat(self.__C.EVAL_BATCH_SIZE, 1, 1)
         # Load parameters
         if self.__C.CKPT_PATH is not None:
             print('Warning: you are now using CKPT_PATH args, '
@@ -430,13 +431,20 @@ class Execution:
 
             img_feat_iter = img_feat_iter.cuda()
             ques_ix_iter = ques_ix_iter.cuda()
+	    
+            input_dict = {
+                        "img_feat": img_feat_iter, 
+                        "ques_ix": ques_ix_iter,
+                        "ans_ix": ans_ix.cuda()
+            }
 
+            # TODO get pred and pred_parent
             pred, pred_abs = net(
-                img_feat_iter,
-                ques_ix_iter
+                input_dict
             )
+
             # pred, _ = self.h_classifier.get_abs_masked_pred(pred, abs_iter.cuda())
-            pred, _ = self.h_classifier.get_abs_masked_pred(pred, pred_abs)
+            # pred, _ = self.h_classifier.get_abs_masked_pred(pred, pred_abs)
             # acc_abs, recall_abs = self.h_classifier.inference_abs()
             pred_np = pred.cpu().data.numpy()
             pred_argmax = np.argmax(pred_np, axis=1)
