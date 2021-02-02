@@ -3,6 +3,10 @@ import logging
 import re
 import torch
 import json
+from fvcore.common.checkpoint import (
+    get_missing_parameters_message,
+    get_unexpected_parameters_message,
+)
 
 from core.data.data_utils import ans_stat
 
@@ -253,31 +257,46 @@ import numpy as np
 class TrainLossMeter(object):
     def __init__(self):
         self.total_steps = 0
+        self.iter_steps = 0
     
     def init_meter(self, loss_keys):
-        self.loss_dict = {x:[] for x in loss_keys}
+        self.loss_iters = {x:0 for x in loss_keys}
         self.loss_sum  = {x:0 for x in loss_keys}
 
     def update_iter(self, d):
         losses = d#d["losses"]
-        if self.total_steps == 0:
+        if self.iter_steps == 0:
             self.init_meter(losses.keys())
         
         for x in losses:
-            self.loss_dict[x].append(losses[x])
+            self.loss_iters[x] += losses[x]
             self.loss_sum[x] += losses[x]
         self.total_steps += 1
+        self.iter_steps += 1
 
     def log_iter(self):
         loss_str = ""
-        for x in self.loss_dict:
-            loss_str = loss_str + f"{x}: {np.mean(self.loss_dict[x])} "
-            self.loss_dict[x].clear()
+        for x in self.loss_iters:
+            loss_str = loss_str + f"{x}: {self.loss_iters[x]/self.iter_steps} "
+        self.iter_steps = 0
         return loss_str
 
     def log_epoch(self):
         loss_str = ""
         for x in self.loss_sum:
             loss_str = loss_str + f"{x}: {self.loss_sum[x]/self.total_steps} "
-            self.loss_dict[x].clear()
+        self.total_steps = 0
+        self.iter_steps = 0
         return loss_str
+
+def get_param_group_finetune(model, base_lr=1e-4):
+    parameters_classifier = []
+    parameters_backbone = []
+    for module_param_name, value in model.named_parameters():
+        if not value.requires_grad:
+            continue
+        if 'classifier' not in module_param_name:
+            parameters_backbone.append(value)
+        else:
+            parameters_classifier.append(value)
+    return [{"params": parameters_backbone, "lr": base_lr*0.1}, {"params": parameters_classifier, "lr": base_lr}]

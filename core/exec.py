@@ -37,17 +37,11 @@ class Execution:
         
         self.h_classifier = HierarchicClassification(__C)
 
-
-    def train(self, dataset, dataset_eval=None):
-
-        # Obtain needed information
+    def build(self, dataset):
         data_size = dataset.data_size
         token_size = dataset.token_size
         ans_size = dataset.ans_size
         pretrained_emb = dataset.pretrained_emb
-        # TODO: answer embedding things:
-        ans_ix = dataset.get_ans_ix()[None,...].repeat(self.__C.BATCH_SIZE, 1, 1)
-        print(ans_ix.shape)
 
         # Define the MCAN model
         if self.__C.MODEL.startswith('q_small'):
@@ -69,23 +63,17 @@ class Execution:
             net.cuda()
             net.train()
 
+        
         # Define the multi-gpu training if needed
         if self.__C.N_GPU > 1:
             net = nn.DataParallel(net, device_ids=self.__C.DEVICES)
 
-        # Define the binary cross entropy loss
-        # loss_fn = torch.nn.BCELoss(size_average=False).cuda()
-        loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
-        # loss_fn = torch.nn.BCELoss(reduction='mean').cuda()
-
         # Load checkpoint if resume training
         if self.__C.RESUME:
             print(' ========== Resume training')
-
             if self.__C.CKPT_PATH is not None:
                 print('Warning: you are now using CKPT_PATH args, '
                       'CKPT_VERSION and CKPT_EPOCH will not work')
-
                 path = self.__C.CKPT_PATH
             else:
                 path = self.__C.CKPTS_PATH + \
@@ -96,33 +84,54 @@ class Execution:
             print('Loading ckpt {}'.format(path))
             ckpt = torch.load(path)
             print('Finish!')
-            # TODO muchen: load part of the model based on the original model
-            # model_state_dict = net.state_dict()
-            # align_and_update_state_dicts(
-            #     model_state_dict,
-            #     ckpt['state_dict']
-            # )
-            net.load_state_dict(ckpt['state_dict'])
-
+            # net.load_state_dict(ckpt['state_dict'])
+            align_and_update_state_dicts(
+                net.state_dict(),
+                ckpt['state_dict']
+            )
             # Load the optimizer paramters
             optim = get_optim(self.__C, net, data_size, ckpt['lr_base'])
             optim._step = int(data_size / self.__C.BATCH_SIZE * self.__C.CKPT_EPOCH)
             optim.optimizer.load_state_dict(ckpt['optimizer'])
-
-            start_epoch = self.__C.CKPT_EPOCH
-
+        elif self.__C.USE_PRETRAIN:
+            assert self.__C.CKPT_PATH is not None, "Please specify the checkpoint for pretrain loading"
+            print(f' ========== Loading pretraining model {self.__C.CKPT_PATH}')
+            ckpt = torch.load(self.__C.CKPT_PATH)
+            # muchen: load part of the model based on the original model
+            align_and_update_state_dicts(
+                net.state_dict(),
+                ckpt['state_dict'] if 'state_dict' in ckpt.keys() else ckpt
+            )
+            from utils import get_param_group_finetune
+            param_groups, lr_multipliers = get_param_group_finetune(net, base_lr=self.__C.LR_BASE)
+            optim = get_optim(self.__C, net, data_size, param_groups=param_groups, lr_multipliers=lr_multipliers)
         else:
             if ('ckpt_' + self.__C.VERSION) in os.listdir(self.__C.CKPTS_PATH):
                 shutil.rmtree(self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION)
-
             os.mkdir(self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION)
-
             optim = get_optim(self.__C, net, data_size)
-            start_epoch = 0
 
+        return optim, net
+
+
+    def train(self, dataset, dataset_eval=None):
+
+        # Obtain needed information
+        data_size = dataset.data_size
+        # TODO: answer embedding things:
+        ans_ix = dataset.get_ans_ix()[None,...].repeat(self.__C.BATCH_SIZE, 1, 1)
+        print(ans_ix.shape)
+
+        # Define the binary cross entropy loss
+        optim, net = self.build(dataset)
+                
+        loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
         loss_sum = 0
-        named_params = list(net.named_parameters())
-        grad_norm = np.zeros(len(named_params))
+
+        if self.__C.RESUME:
+            start_epoch = self.__C.CKPT_EPOCH
+        else:
+            start_epoch = 0
 
         # Define multi-thread dataloader
         if self.__C.SHUFFLE_MODE in ['external']:
@@ -180,9 +189,7 @@ class Execution:
                     abs_iter,
                     loss_masks
             ) in enumerate(dataloader):
-
                 optim.zero_grad()
-
                 img_feat_iter = img_feat_iter.cuda()
                 ques_ix_iter = ques_ix_iter.cuda()
                 ans_iter = ans_iter.cuda()
@@ -202,15 +209,15 @@ class Execution:
                     sub_ans_iter = \
                         ans_iter[accu_step * self.__C.SUB_BATCH_SIZE:
                                  (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    sub_abs_iter = \
-                        abs_iter[accu_step * self.__C.SUB_BATCH_SIZE:
-                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    sub_mask_abs = \
-                        mask_abs[accu_step * self.__C.SUB_BATCH_SIZE:
-                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    sub_mask_ans = \
-                        mask_ans[accu_step * self.__C.SUB_BATCH_SIZE:
-                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    # sub_abs_iter = \
+                    #     abs_iter[accu_step * self.__C.SUB_BATCH_SIZE:
+                    #              (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    # sub_mask_abs = \
+                    #     mask_abs[accu_step * self.__C.SUB_BATCH_SIZE:
+                    #              (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    # sub_mask_ans = \
+                    #     mask_ans[accu_step * self.__C.SUB_BATCH_SIZE:
+                    #              (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
 
                     input_dict = {
                         "img_feat": sub_img_feat_iter, 
@@ -223,23 +230,23 @@ class Execution:
                         input_dict
                     )
                     # TODO loss of pred_parent and pred based on gt path
-                    loss_ans, loss_abs = self.h_classifier.get_loss(
-                                                  pred, pred_abs, 
-                                                  sub_ans_iter, sub_abs_iter, 
-                                                  sub_mask_ans, sub_mask_abs, 
-                                                  loss_fn)
-                    loss = loss_ans + loss_abs * self.__C.ABS_ALPHA
-                    # loss = loss_fn(pred, sub_ans_iter)
+                    # loss_ans, loss_abs = self.h_classifier.get_loss(
+                    #                               pred, pred_abs, 
+                    #                               sub_ans_iter, sub_abs_iter, 
+                    #                               sub_mask_ans, sub_mask_abs, 
+                    #                               loss_fn)
+                    # loss = loss_ans + loss_abs * self.__C.ABS_ALPHA
+                    loss = loss_fn(pred, sub_ans_iter)
 
                     # only mean-reduction needs be divided by grad_accu_steps
                     # removing this line wouldn't change our results because the speciality of Adam optimizer,
                     # but would be necessary if you use SGD optimizer.
-                    loss /= self.__C.GRAD_ACCU_STEPS
+                    # loss /= self.__C.GRAD_ACCU_STEPS
                     loss.backward()
                     loss_sum += loss.cpu().data.numpy() * self.__C.GRAD_ACCU_STEPS
-                    meter.update_iter({"loss":loss.cpu().item(),
-                                   "loss_ans":loss_ans.cpu().item(),
-                                   "loss_abs":loss_abs.cpu().item()})
+                    meter.update_iter({"loss":loss.cpu().item() / self.__C.SUB_BATCH_SIZE})#,
+                                #    "loss_ans":loss_ans.cpu().item(),
+                                #    "loss_abs":loss_abs.cpu().item()})
 
                     # TODO ADD PERIODIC PRINT
                     if step % self.__C.LOG_CYCLE == self.__C.LOG_CYCLE - 1:
@@ -267,16 +274,6 @@ class Execution:
                         self.__C.GRAD_NORM_CLIP
                     )
 
-                # Save the gradient information
-                for name in range(len(named_params)):
-                    norm_v = torch.norm(named_params[name][1].grad).cpu().data.numpy() \
-                        if named_params[name][1].grad is not None else 0
-                    grad_norm[name] += norm_v * self.__C.GRAD_ACCU_STEPS
-                    # print('Param %-3s Name %-80s Grad_Norm %-20s'%
-                    #       (str(grad_wt),
-                    #        params[grad_wt][0],
-                    #        str(norm_v)))
-
                 optim.step()
 
             time_end = time.time()
@@ -293,17 +290,20 @@ class Execution:
             epoch_finish = epoch + 1
 
             # Save checkpoint
+            if self.__C.N_GPU > 1:
+                state_dict = net.module.state_dict()
+            else:
+                state_dict = net.state_dict()
+                
             state = {
-                'state_dict': net.state_dict(),
+                'state_dict': state_dict,
                 'optimizer': optim.optimizer.state_dict(),
                 'lr_base': optim.lr_base
             }
             torch.save(
                 state,
-                self.__C.CKPTS_PATH +
-                'ckpt_' + self.__C.VERSION +
-                '/epoch' + str(epoch_finish) +
-                '.pkl'
+                self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION +
+                '/epoch' + str(epoch_finish) + '.pkl'
             )
 
             # Logging
@@ -325,40 +325,24 @@ class Execution:
             if epoch % 3 == 2 and dataset_eval is not None:
                self.eval(
                    dataset_eval,
-                   state_dict=net.state_dict(),
+                   state_dict=state_dict,
                    valid=True
                )
 
-            # if self.__C.VERBOSE:
-            #     logfile = open(
-            #         self.__C.LOG_PATH +
-            #         'log_run_' + self.__C.VERSION + '.txt',
-            #         'a+'
-            #     )
-            #     for name in range(len(named_params)):
-            #         logfile.write(
-            #             'Param %-3s Name %-80s Grad_Norm %-25s\n' % (
-            #                 str(name),
-            #                 named_params[name][0],
-            #                 str(grad_norm[name] / data_size * self.__C.BATCH_SIZE)
-            #             )
-            #         )
-            #     logfile.write('\n')
-            #     logfile.close()
-
             loss_sum = 0
-            grad_norm = np.zeros(len(named_params))
-
 
     # Evaluation
     def eval(self, dataset, state_dict=None, valid=False):
-
+        data_size = dataset.data_size
+        token_size = dataset.token_size
+        ans_size = dataset.ans_size
+        pretrained_emb = dataset.pretrained_emb
         ans_ix = dataset.get_ans_ix()[None,...].repeat(self.__C.EVAL_BATCH_SIZE, 1, 1)
+
         # Load parameters
         if self.__C.CKPT_PATH is not None:
             print('Warning: you are now using CKPT_PATH args, '
                   'CKPT_VERSION and CKPT_EPOCH will not work')
-
             path = self.__C.CKPT_PATH
         else:
             path = self.__C.CKPTS_PATH + \
@@ -372,15 +356,6 @@ class Execution:
             state_dict = torch.load(path)['state_dict']
             print('Finish!')
 
-        # Store the prediction list
-        qid_list = [ques['question_id'] for ques in dataset.ques_list]
-        ans_ix_list = []
-        pred_list = []
-
-        data_size = dataset.data_size
-        token_size = dataset.token_size
-        ans_size = dataset.ans_size
-        pretrained_emb = dataset.pretrained_emb
 
         # Define the MCAN model
         if self.__C.MODEL.startswith('q_small'):
@@ -404,10 +379,10 @@ class Execution:
         net.cuda()
         net.eval()
 
+        net.load_state_dict(state_dict)
+
         if self.__C.N_GPU > 1:
             net = nn.DataParallel(net, device_ids=self.__C.DEVICES)
-
-        net.load_state_dict(state_dict)
 
         dataloader = Data.DataLoader(
             dataset,
@@ -417,12 +392,16 @@ class Execution:
             pin_memory=True
         )
 
+        # Store the prediction list
+        qid_list = [ques['question_id'] for ques in dataset.ques_list]
+        ans_ix_list = []
+        pred_list = []
         for step, (
-                img_feat_iter,
-                ques_ix_iter,
-                ans_iter,
-                abs_iter,
-                loss_mask,
+            img_feat_iter,
+            ques_ix_iter,
+            ans_iter,
+            abs_iter,
+            loss_mask,
         ) in enumerate(dataloader):
             print("\rEvaluation: [step %4d/%4d]" % (
                 step,
@@ -443,7 +422,6 @@ class Execution:
                 input_dict
             )
 
-            # pred, _ = self.h_classifier.get_abs_masked_pred(pred, abs_iter.cuda())
             # pred, _ = self.h_classifier.get_abs_masked_pred(pred, pred_abs)
             # acc_abs, recall_abs = self.h_classifier.inference_abs()
             pred_np = pred.cpu().data.numpy()

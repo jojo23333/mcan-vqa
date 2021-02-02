@@ -240,7 +240,7 @@ class Net_QClassifier(nn.Module):
         )
 
         self.backbone = MCA_ED(__C)
-        self.head = Qclassifier(__C, self.embedding)
+        self.classifier = Qclassifier(__C, self.embedding)
         self.answer_size = answer_size
 
 
@@ -278,7 +278,7 @@ class Net_QClassifier(nn.Module):
         # only take the last output of lstm, could be changed later
         ans_feat = ans_feat[None,:,-1,:]
 
-        pred = self.head(ans_feat, lang_feat, img_feat, lang_feat_mask, img_feat_mask)
+        pred = self.classifier(ans_feat, lang_feat, img_feat, lang_feat_mask, img_feat_mask)
 
         return pred, None
 

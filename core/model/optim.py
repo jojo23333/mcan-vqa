@@ -9,21 +9,22 @@ import torch.optim as Optim
 
 
 class WarmupOptimizer(object):
-    def __init__(self, lr_base, optimizer, data_size, batch_size):
+    def __init__(self, lr_base, optimizer, data_size, batch_size, lr_multipliers=[1]):
         self.optimizer = optimizer
         self._step = 0
         self.lr_base = lr_base
         self._rate = 0
         self.data_size = data_size
         self.batch_size = batch_size
-
+        assert len(self.optimizer.param_groups) == len(lr_multipliers), "Length of learning rate group do not correspond"
+        self.lr_multipliers = lr_multipliers
 
     def step(self):
         self._step += 1
 
         rate = self.rate()
-        for p in self.optimizer.param_groups:
-            p['lr'] = rate
+        for i, p in enumerate(self.optimizer.param_groups):
+            p['lr'] = rate * self.lr_multipliers[i]
         self._rate = rate
 
         self.optimizer.step()
@@ -49,20 +50,23 @@ class WarmupOptimizer(object):
         return r
 
 
-def get_optim(__C, model, data_size, lr_base=None):
+def get_optim(__C, model, data_size, lr_base=None, param_groups=None, lr_multipliers=[1.]):
     if lr_base is None:
         lr_base = __C.LR_BASE
+    if param_groups is None:
+        param_groups = filter(lambda p: p.requires_grad, model.parameters())
 
     return WarmupOptimizer(
         lr_base,
         Optim.Adam(
-            filter(lambda p: p.requires_grad, model.parameters()),
+            param_groups,
             lr=0,
             betas=__C.OPT_BETAS,
-            eps=__C.OPT_EPS
+            eps=__C.OPT_EPS,
         ),
         data_size,
-        __C.BATCH_SIZE
+        __C.BATCH_SIZE,
+        lr_multipliers=lr_multipliers
     )
 
 

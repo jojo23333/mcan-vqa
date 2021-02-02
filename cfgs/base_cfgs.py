@@ -54,6 +54,8 @@ class Cfgs(PATH):
         self.USE_ABS_MASKED_PRED = True
 
         self.DECODER_CLASSIFIER = 'NoSelfAtt' # 'NoSelfAtt', 'GCN'
+
+        self.USE_PRETRAIN = True
         # ------------------------------
         # ---- Data Provider Params ----
         # ------------------------------
@@ -221,6 +223,8 @@ class Cfgs(PATH):
             print('Warning: you are now using CKPT_PATH args, '
                   'CKPT_VERSION and CKPT_EPOCH will not work')
             self.CKPT_VERSION = self.CKPT_PATH.split('/')[-1] + '_' + str(random.randint(0, 99999999))
+        else:
+            self.CKPT_VERSION = self.VERSION
 
 
         # ------------ Split setup
