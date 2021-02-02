@@ -265,7 +265,7 @@ class TrainLossMeter(object):
 
     def update_iter(self, d):
         losses = d#d["losses"]
-        if self.iter_steps == 0:
+        if self.total_steps == 0:
             self.init_meter(losses.keys())
         
         for x in losses:
@@ -278,7 +278,7 @@ class TrainLossMeter(object):
         loss_str = ""
         for x in self.loss_iters:
             loss_str = loss_str + f"{x}: {self.loss_iters[x]/self.iter_steps} "
-        self.iter_steps = 0
+        self.loss_iters = {x:0 for x in self.loss_iters}
         return loss_str
 
     def log_epoch(self):
@@ -299,4 +299,5 @@ def get_param_group_finetune(model, base_lr=1e-4):
             parameters_backbone.append(value)
         else:
             parameters_classifier.append(value)
-    return [{"params": parameters_backbone, "lr": base_lr*0.1}, {"params": parameters_classifier, "lr": base_lr}]
+    return [{"params": parameters_backbone, "lr": base_lr*0.1}, 
+            {"params": parameters_classifier, "lr": base_lr}], [0.1, 1.]

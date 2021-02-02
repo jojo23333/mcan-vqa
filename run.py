@@ -75,6 +75,10 @@ def parse_args():
                       help='resume training',
                       type=bool)
 
+    parser.add_argument('--PRETRAIN', dest='USE_PRETRAIN',
+                      help='resume training',
+                      type=bool)
+
     parser.add_argument('--CKPT_V', dest='CKPT_VERSION',
                       help='checkpoint version',
                       type=str)

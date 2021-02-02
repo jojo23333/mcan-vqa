@@ -9,7 +9,8 @@ import torch.optim as Optim
 
 
 class WarmupOptimizer(object):
-    def __init__(self, lr_base, optimizer, data_size, batch_size, lr_multipliers=[1]):
+    def __init__(self, __C, lr_base, optimizer, data_size, batch_size, lr_multipliers=[1]):
+        self.__C = __C
         self.optimizer = optimizer
         self._step = 0
         self.lr_base = lr_base
@@ -47,7 +48,11 @@ class WarmupOptimizer(object):
         else:
             r = self.lr_base
 
-        return r
+        # jump over warming up if pretrain is used
+        if self.__C.USE_PRETRAIN:
+            return self.lr_base
+        else:
+            return r
 
 
 def get_optim(__C, model, data_size, lr_base=None, param_groups=None, lr_multipliers=[1.]):
@@ -57,6 +62,7 @@ def get_optim(__C, model, data_size, lr_base=None, param_groups=None, lr_multipl
         param_groups = filter(lambda p: p.requires_grad, model.parameters())
 
     return WarmupOptimizer(
+        __C,
         lr_base,
         Optim.Adam(
             param_groups,

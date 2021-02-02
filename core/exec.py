@@ -11,11 +11,13 @@ from core.model.optim import get_optim, adjust_lr
 from core.data.data_utils import shuffle_list
 from utils.vqa import VQA
 from utils.vqaEval import VQAEval
+from torch.utils.tensorboard import SummaryWriter
 
 import os, json, torch, datetime, pickle, copy, shutil, time
 import numpy as np
 import torch.nn as nn
 import torch.utils.data as Data
+
 
 from core.utils import align_and_update_state_dicts, TrainLossMeter, HierarchicClassification
 
@@ -36,6 +38,7 @@ class Execution:
             self.dataset_eval = DataSet(__C_eval)
         
         self.h_classifier = HierarchicClassification(__C)
+        self.writer = SummaryWriter(log_dir=f'./results/tensorboard/{self.__C.CKPT_VERSION}')
 
     def build(self, dataset):
         data_size = dataset.data_size
@@ -102,7 +105,7 @@ class Execution:
                 net.state_dict(),
                 ckpt['state_dict'] if 'state_dict' in ckpt.keys() else ckpt
             )
-            from utils import get_param_group_finetune
+            from core.utils import get_param_group_finetune
             param_groups, lr_multipliers = get_param_group_finetune(net, base_lr=self.__C.LR_BASE)
             optim = get_optim(self.__C, net, data_size, param_groups=param_groups, lr_multipliers=lr_multipliers)
         else:
@@ -247,6 +250,9 @@ class Execution:
                     meter.update_iter({"loss":loss.cpu().item() / self.__C.SUB_BATCH_SIZE})#,
                                 #    "loss_ans":loss_ans.cpu().item(),
                                 #    "loss_abs":loss_abs.cpu().item()})
+                    global_step = step + int(data_size/self.__C.BATCH_SIZE) * epoch
+                    self.writer.add_scalar('train/loss_bce', loss.cpu().item() / self.__C.SUB_BATCH_SIZE, global_step)
+                    
 
                     # TODO ADD PERIODIC PRINT
                     if step % self.__C.LOG_CYCLE == self.__C.LOG_CYCLE - 1:

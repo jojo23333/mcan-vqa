@@ -55,7 +55,7 @@ class Cfgs(PATH):
 
         self.DECODER_CLASSIFIER = 'NoSelfAtt' # 'NoSelfAtt', 'GCN'
 
-        self.USE_PRETRAIN = True
+        self.USE_PRETRAIN = False
         # ------------------------------
         # ---- Data Provider Params ----
         # ------------------------------
