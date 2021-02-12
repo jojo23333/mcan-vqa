@@ -38,7 +38,7 @@ class Execution:
             self.dataset_eval = DataSet(__C_eval)
         
         self.h_classifier = HierarchicClassification(__C)
-        self.writer = SummaryWriter(log_dir=f'./results/tensorboard/{self.__C.CKPT_VERSION}')
+        self.writer = SummaryWriter(log_dir=f'./results/tensorboard/{self.__C.VERSION}')
 
     def build(self, dataset):
         data_size = dataset.data_size
@@ -87,11 +87,15 @@ class Execution:
             print('Loading ckpt {}'.format(path))
             ckpt = torch.load(path)
             print('Finish!')
-            # net.load_state_dict(ckpt['state_dict'])
-            align_and_update_state_dicts(
-                net.state_dict(),
-                ckpt['state_dict']
-            )
+            if isinstance(net, nn.DataParallel):
+            	net.module.load_state_dict(ckpt['state_dict'])
+            else:
+                net.load_state_dict(ckpt['state_dict'])
+            # TODO check this align and update state dicts function, probably have problem with resuming 
+            #align_and_update_state_dicts(
+            #    net.state_dict(),
+            #    ckpt['state_dict']
+            #)
             # Load the optimizer paramters
             optim = get_optim(self.__C, net, data_size, ckpt['lr_base'])
             optim._step = int(data_size / self.__C.BATCH_SIZE * self.__C.CKPT_EPOCH)
@@ -111,8 +115,9 @@ class Execution:
         else:
             if ('ckpt_' + self.__C.VERSION) in os.listdir(self.__C.CKPTS_PATH):
                 shutil.rmtree(self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION)
-            os.mkdir(self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION)
             optim = get_optim(self.__C, net, data_size)
+        if not os.path.exists(self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION):
+            os.mkdir(self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION)
 
         return optim, net
 
@@ -309,8 +314,14 @@ class Execution:
             torch.save(
                 state,
                 self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION +
-                '/epoch' + str(epoch_finish) + '.pkl'
+                '/epoch_latest' + '.pkl'
             )
+            if epoch % 3 == 2:
+                torch.save(
+                    state,
+                    self.__C.CKPTS_PATH + 'ckpt_' + self.__C.VERSION +
+                    '/epoch' + str(epoch_finish) + '.pkl'
+                )
 
             # Logging
             logfile = open(

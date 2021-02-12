@@ -279,6 +279,7 @@ class TrainLossMeter(object):
         for x in self.loss_iters:
             loss_str = loss_str + f"{x}: {self.loss_iters[x]/self.iter_steps} "
         self.loss_iters = {x:0 for x in self.loss_iters}
+        self.iter_steps = 0
         return loss_str
 
     def log_epoch(self):
