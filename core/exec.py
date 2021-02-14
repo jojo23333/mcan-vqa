@@ -126,14 +126,11 @@ class Execution:
 
         # Obtain needed information
         data_size = dataset.data_size
-        # TODO: answer embedding things:
-        ans_ix = dataset.get_ans_ix()[None,...].repeat(self.__C.BATCH_SIZE, 1, 1)
-        print(ans_ix.shape)
 
         # Define the binary cross entropy loss
         optim, net = self.build(dataset)
                 
-        loss_fn = torch.nn.BCELoss(reduction='sum').cuda()
+        loss_fn = torch.nn.BCELoss(reduction='mean').cuda()
         loss_sum = 0
 
         if self.__C.RESUME:
@@ -190,47 +187,39 @@ class Execution:
 
             time_start = time.time()
             # Iteration
-            for step, (
-                    img_feat_iter,
-                    ques_ix_iter,
-                    ans_iter,
-                    abs_iter,
-                    loss_masks
-            ) in enumerate(dataloader):
+            for step, batch in enumerate(dataloader):
                 optim.zero_grad()
-                img_feat_iter = img_feat_iter.cuda()
-                ques_ix_iter = ques_ix_iter.cuda()
-                ans_iter = ans_iter.cuda()
-                abs_iter = abs_iter.cuda()
-                mask_abs, mask_ans = [x.cuda() for x in loss_masks]
-                # print(loss_masks)
+                img_feat = batch["img_feat"].cuda()
+                ques_ix = batch["ques_ix"].cuda()
+                ans = batch["ans_score"].cuda()
+                ans_embedding = batch["ans_embedding_sampled"].cuda()
+                ans_sampled = batch["ans_score_sampled"].cuda()
+                # abs = abs.cuda()
+                # mask_abs, mask_ans = [x.cuda() for x in loss_masks]
 
                 # TODO MODIFY HERE
                 for accu_step in range(self.__C.GRAD_ACCU_STEPS):
 
-                    sub_img_feat_iter = \
-                        img_feat_iter[accu_step * self.__C.SUB_BATCH_SIZE:
+                    sub_img_feat = \
+                        img_feat[accu_step * self.__C.SUB_BATCH_SIZE:
                                       (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    sub_ques_ix_iter = \
-                        ques_ix_iter[accu_step * self.__C.SUB_BATCH_SIZE:
+                    sub_ques_ix = \
+                        ques_ix[accu_step * self.__C.SUB_BATCH_SIZE:
                                      (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    sub_ans_iter = \
-                        ans_iter[accu_step * self.__C.SUB_BATCH_SIZE:
+                    sub_ans = \
+                        ans[accu_step * self.__C.SUB_BATCH_SIZE:
                                  (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    # sub_abs_iter = \
-                    #     abs_iter[accu_step * self.__C.SUB_BATCH_SIZE:
-                    #              (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    # sub_mask_abs = \
-                    #     mask_abs[accu_step * self.__C.SUB_BATCH_SIZE:
-                    #              (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
-                    # sub_mask_ans = \
-                    #     mask_ans[accu_step * self.__C.SUB_BATCH_SIZE:
-                    #              (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    sub_ans_embedding = \
+                        ans_embedding[accu_step * self.__C.SUB_BATCH_SIZE:
+                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
+                    sub_ans_sampled = \
+                        ans_sampled[accu_step * self.__C.SUB_BATCH_SIZE:
+                                 (accu_step + 1) * self.__C.SUB_BATCH_SIZE]
 
                     input_dict = {
-                        "img_feat": sub_img_feat_iter, 
-                        "ques_ix": sub_ques_ix_iter,
-                        "ans_ix": ans_ix.cuda()
+                        "img_feat": sub_img_feat, 
+                        "ques_ix": sub_ques_ix,
+                        "ans_ix": sub_ans_embedding
                     }
 
                     # TODO get pred and pred_parent
@@ -240,16 +229,16 @@ class Execution:
                     # TODO loss of pred_parent and pred based on gt path
                     # loss_ans, loss_abs = self.h_classifier.get_loss(
                     #                               pred, pred_abs, 
-                    #                               sub_ans_iter, sub_abs_iter, 
+                    #                               sub_ans, sub_abs, 
                     #                               sub_mask_ans, sub_mask_abs, 
                     #                               loss_fn)
                     # loss = loss_ans + loss_abs * self.__C.ABS_ALPHA
-                    loss = loss_fn(pred, sub_ans_iter)
+                    loss = loss_fn(pred, sub_ans_sampled)
 
                     # only mean-reduction needs be divided by grad_accu_steps
                     # removing this line wouldn't change our results because the speciality of Adam optimizer,
                     # but would be necessary if you use SGD optimizer.
-                    # loss /= self.__C.GRAD_ACCU_STEPS
+                    loss /= self.__C.GRAD_ACCU_STEPS
                     loss.backward()
                     loss_sum += loss.cpu().data.numpy() * self.__C.GRAD_ACCU_STEPS
                     meter.update_iter({"loss":loss.cpu().item() / self.__C.SUB_BATCH_SIZE})#,
@@ -414,10 +403,10 @@ class Execution:
         ans_ix_list = []
         pred_list = []
         for step, (
-            img_feat_iter,
-            ques_ix_iter,
-            ans_iter,
-            abs_iter,
+            img_feat,
+            ques_ix,
+            ans,
+            abs,
             loss_mask,
         ) in enumerate(dataloader):
             print("\rEvaluation: [step %4d/%4d]" % (
@@ -425,12 +414,12 @@ class Execution:
                 int(data_size / self.__C.EVAL_BATCH_SIZE),
             ), end='          ')
 
-            img_feat_iter = img_feat_iter.cuda()
-            ques_ix_iter = ques_ix_iter.cuda()
+            img_feat = img_feat.cuda()
+            ques_ix = ques_ix.cuda()
 	    
             input_dict = {
-                        "img_feat": img_feat_iter, 
-                        "ques_ix": ques_ix_iter,
+                        "img_feat": img_feat, 
+                        "ques_ix": ques_ix,
                         "ans_ix": ans_ix.cuda()
             }
 

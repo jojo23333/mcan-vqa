@@ -108,7 +108,8 @@ class DataSet(Data.Dataset):
         self.token_size = self.token_to_ix.__len__()
         print('== Question token vocab size:', self.token_size)
 
-        self.ans_embedding_ixs = self.get_ans_ix()
+        # TODO
+        self.init_abs_tree()
 
     def get_ans_ix(self):
         """
@@ -119,24 +120,7 @@ class DataSet(Data.Dataset):
         for ans in answers:
             ans_embedding_ixs.append(proc_ques(ans, self.token_to_ix, 4))
         ans_embedding_ixs = np.stack(ans_embedding_ixs)
-        return ans_embedding_ixs
-
-    def get_sampled_ans(self, ans_iter):
-        assert self.ans_embedding_ixs.shape[0] == ans_iter.shape[0]
-        gt_loc = ans_iter > 0.
-        negative_loc = ans_iter == 0.
-
-        indices = np.arange(0, self.ans_to_ix.__len__())
-        indice_gt = indices[gt_loc]
-        assert self.__C - indice_gt.shape[0] > 0
-        indice_random_sample = np.random.choice(
-                                a = indices[negative_loc],
-                                size = self.__C.CLASSIFIER_QUERY_NUM - indice_gt.shape[0], 
-                                replace = False
-                            )
-        indices = np.stack([indice_gt, indice_random_sample], axis=0)
-        return self.ans_embedding_ixs[indices], ans_iter[indices]
-
+        return torch.from_numpy(ans_embedding_ixs)
 
     # TODO modify dataloader and return gt abstractions and node groups for computing loss
     def __getitem__(self, idx):
@@ -145,6 +129,8 @@ class DataSet(Data.Dataset):
         img_feat_iter = np.zeros(1)
         ques_ix_iter = np.zeros(1)
         ans_iter = np.zeros(1)
+        abs_iter = np.zeros(1)
+        loss_masks = np.zeros(1)
 
         # Process ['train'] and ['val', 'test'] respectively
         if self.__C.RUN_MODE in ['train', 'val']:
@@ -164,17 +150,8 @@ class DataSet(Data.Dataset):
             ques_ix_iter = proc_ques(ques, self.token_to_ix, self.__C.MAX_TOKEN)
 
             # Process answer
-            ans_iter = proc_ans(ans, self.ans_to_ix)
-
-            ans_embedding_sampled, ans_score_sampled = self.get_sampled_ans(ans_iter)
-
-            return {
-                "img_feat" : torch.from_numpy(img_feat_iter),
-                "ques_ix" : torch.from_numpy(ques_ix_iter),
-                "ans_score" : torch.from_numpy(ans_iter),
-                "ans_embedding_sampled" : torch.from_numpy(ans_embedding_sampled),
-                "ans_score_sampled" : torch.from_numpy(ans_score_sampled)
-            }
+            # ans_iter = proc_ans(ans, self.ans_to_ix)
+            ans_iter, abs_iter, loss_masks = self.proc_ans_and_abs(ans)
 
         else:
             # Load the run data from list
@@ -194,19 +171,91 @@ class DataSet(Data.Dataset):
             # Process question
             ques_ix_iter = proc_ques(ques, self.token_to_ix, self.__C.MAX_TOKEN)
 
-            return {
-                "img_feat" : torch.from_numpy(img_feat_iter),
-                "ques_ix" : torch.from_numpy(ques_ix_iter),
-                "ans_score" : torch.from_numpy(ans_iter)
-            }
+
+        return torch.from_numpy(img_feat_iter), \
+               torch.from_numpy(ques_ix_iter), \
+               torch.from_numpy(ans_iter), \
+               torch.from_numpy(abs_iter), \
+               loss_masks
+
+    def proc_ans_and_abs(self, ans):
+        ans_to_ix = self.ans_to_ix
+        abs_to_ix = self.abs_to_ix
+        ans_score = np.zeros(ans_to_ix.__len__(), np.float32)
+        abs_score = np.zeros(abs_to_ix.__len__(), np.float32)
+        ans_group = np.zeros(ans_to_ix.__len__(), np.bool)
+        abs_group = np.zeros(abs_to_ix.__len__(), np.bool)
+
+        ans_prob_dict = {}
+        # process ans
+        for ans_ in ans['answers']:
+            ans_proc = prep_ans(ans_['answer'])
+            if ans_proc not in ans_prob_dict:
+                ans_prob_dict[ans_proc] = 1
+            else:
+                ans_prob_dict[ans_proc] += 1
+
+        for ans_ in ans_prob_dict:
+            if ans_ in ans_to_ix:
+                ans_score[ans_to_ix[ans_]] = get_score(ans_prob_dict[ans_])
+
+        # process abstraction
+        ans_appear_most = sorted(ans_prob_dict.items(), key=lambda x: -1*x[1])[0][0]
+        
+            
+        if ans_appear_most in ans_to_ix:
+            # from top to down
+            abspath = self.ans_to_abspath[ans_appear_most]
+            # Select groups for computing losses
+            if len(abspath) != 0:
+                for abs_ in abspath[1:]:
+                    abs_score[abs_to_ix[abs_]] = 1.0
+
+                for x in abspath:
+                    children = self.abs_tree[x]
+                    if children[0] in ans_to_ix:
+                        ids = [ans_to_ix[a] for a in children]
+                        ans_group[ids] = True
+                    else:
+                        ids = [abs_to_ix[a] for a in children]
+                        abs_group[ids] = True
+
+                return ans_score, abs_score, (abs_group, ans_group)
+
+        return ans_score, abs_score,\
+               (np.zeros(abs_to_ix.__len__(), np.bool),\
+                np.ones(ans_to_ix.__len__(), np.bool))
+
+    # TODO
+    def init_abs_tree(self):
+        with open('core/data/answer_dict_hierarchical.json', 'r') as f:
+            data = json.load(f)
+        # edge link of the abs tree
+        self.abs_tree = data['tree_dict']
+        # list of id from abs to ix
+        self.abs_to_ix =  data['abs_dict']
+        # given ans, give all possible nodes of path to the ans, the first comonent is always '_root'
+        self.ans_to_abspath = {x:[] for x in self.ans_to_ix.keys()}
+
+        def dfs_search(current_node, path, tree):
+            # if not leaf node yet
+            # print(f"Processing node: {current_node}:{path}")
+            if current_node in tree:
+                print(f"Processing node: {current_node}:{path}")
+                for child in tree[current_node]:
+                    dfs_search(child, path+[current_node], tree)
+            else:
+                for x in path:
+                    if x not in self.ans_to_abspath[current_node]:
+                        self.ans_to_abspath[current_node].append(x)
+        
+        dfs_search('_rt', [], self.abs_tree)
+        print("Processing of tree finished")
+        # for ans_ in self.ans_to_ix.keys():
+        #     if ans_ not in self.ans_to_abspath:
+        #         self.ans_to_abspath = 
 
     def __len__(self):
         return self.data_size
-
-def sample_query_ans(ans_list, ans_score):
-    """
-    input: two tensors
-    """
-
 
 
