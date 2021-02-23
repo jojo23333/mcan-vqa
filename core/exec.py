@@ -37,7 +37,7 @@ class Execution:
             print('Loading validation set for per-epoch evaluation ........')
             self.dataset_eval = DataSet(__C_eval)
         
-        self.h_classifier = HierarchicClassification(__C)
+        #self.h_classifier = HierarchicClassification(__C)
         self.writer = SummaryWriter(log_dir=f'./results/tensorboard/{self.__C.VERSION}')
 
     def build(self, dataset):
@@ -127,6 +127,7 @@ class Execution:
         # Obtain needed information
         data_size = dataset.data_size
 
+        dataset.__getitem__(0)
         # Define the binary cross entropy loss
         optim, net = self.build(dataset)
                 
@@ -233,7 +234,10 @@ class Execution:
                     #                               sub_mask_ans, sub_mask_abs, 
                     #                               loss_fn)
                     # loss = loss_ans + loss_abs * self.__C.ABS_ALPHA
-                    loss = loss_fn(pred, sub_ans_sampled)
+                    if self.__C.MODEL.startswith('q_small'):
+                        loss = loss_fn(pred, sub_ans_sampled)
+                    else:
+                        loss = loss_fn(pred, sub_ans)
 
                     # only mean-reduction needs be divided by grad_accu_steps
                     # removing this line wouldn't change our results because the speciality of Adam optimizer,
@@ -241,11 +245,11 @@ class Execution:
                     loss /= self.__C.GRAD_ACCU_STEPS
                     loss.backward()
                     loss_sum += loss.cpu().data.numpy() * self.__C.GRAD_ACCU_STEPS
-                    meter.update_iter({"loss":loss.cpu().item() / self.__C.SUB_BATCH_SIZE})#,
+                    meter.update_iter({"loss":loss.cpu().item()})# / self.__C.SUB_BATCH_SIZE})#,
                                 #    "loss_ans":loss_ans.cpu().item(),
                                 #    "loss_abs":loss_abs.cpu().item()})
                     global_step = step + int(data_size/self.__C.BATCH_SIZE) * epoch
-                    self.writer.add_scalar('train/loss_bce', loss.cpu().item() / self.__C.SUB_BATCH_SIZE, global_step)
+                    self.writer.add_scalar('train/loss_bce', loss.cpu().item(), global_step)
                     
 
                     # TODO ADD PERIODIC PRINT

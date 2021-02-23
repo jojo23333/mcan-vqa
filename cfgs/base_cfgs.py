@@ -66,7 +66,7 @@ class Cfgs(PATH):
         self.RUN_MODE = 'train'
 
         # Set True to evaluate offline
-        self.EVAL_EVERY_EPOCH = True
+        self.EVAL_EVERY_EPOCH = False
 
         # Set True to save the prediction vector (Ensemble)
         self.TEST_SAVE_PRED = False
@@ -83,8 +83,8 @@ class Cfgs(PATH):
         }
 
         # A external method to set train split
-        # self.TRAIN_SPLIT = 'train+val+vg' # Use val to evaluate more accurately
-        self.TRAIN_SPLIT = 'train'
+        self.TRAIN_SPLIT = 'train+val+vg' # Use val to evaluate more accurately
+        #self.TRAIN_SPLIT = 'train'
 
         # Set True to use pretrained word embedding
         # (GloVe: spaCy https://spacy.io/)

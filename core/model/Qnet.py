@@ -157,15 +157,15 @@ class Qclassifier(nn.Module):
         super(Qclassifier, self).__init__()
 
         # TODO:
-        NUM_DECODER_LAYER = 2
+        NUM_DECODER_LAYER = 3
         if __C.DECODER_CLASSIFIER == 'GCN':
-            decoder_layer = DecoderLayerGCN(d_model = __C.HIDDEN_SIZE,
+            decoder_layer = TransformerDecoderLayer(d_model = __C.HIDDEN_SIZE,
                                             nhead = 4,
-                                            dim_feedforward = 512)
+                                            dim_feedforward = 1024)
         elif __C.DECODER_CLASSIFIER == 'NoSelfAtt':
             decoder_layer = DecoderLayerNoSelfAtt(d_model = __C.HIDDEN_SIZE,
-                                                    nhead = 4,
-                                                    dim_feedforward = 512)
+                                                  nhead = 4,
+                                                  dim_feedforward = 1024)
         self.decoder_layers_img = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
         self.decoder_layers_ques = nn.ModuleList([copy.deepcopy(decoder_layer) for i in range(NUM_DECODER_LAYER)])
 
@@ -179,7 +179,7 @@ class Qclassifier(nn.Module):
         """
         # expand ans_feat
         batch_size = ques_feat.shape[0]
-        ans_feat = ans_feat.repeat(batch_size, 1, 1)
+        # ans_feat = ans_feat.repeat(batch_size, 1, 1)
         # print(ans_feat.shape, img_feat.shape, ques_feat.shape)
 
         # decoder layers
@@ -249,7 +249,7 @@ class Net_QClassifier(nn.Module):
         ques_ix = input_dict['ques_ix']
         ans_ix = input_dict['ans_ix']
 
-        assert ans_ix.size()[1] == self.answer_size
+        # assert ans_ix.size()[1] == self.answer_size
 
         # Make mask
         lang_feat_mask = make_mask(ques_ix.unsqueeze(2))
@@ -272,11 +272,12 @@ class Net_QClassifier(nn.Module):
 
         # get ans_feat
         self.lstm_ans.flatten_parameters()
-        ans_feat = self.embedding(ans_ix[0])
-        ans_feat, _ = self.lstm_ans(ans_feat)
+        batch_size, query_num, seq_len = ans_ix.shape
+        ans_feat = self.embedding(ans_ix)
+        ans_feat, _ = self.lstm_ans(ans_feat.view(batch_size * query_num, seq_len, -1))
         
         # only take the last output of lstm, could be changed later
-        ans_feat = ans_feat[None,:,-1,:]
+        ans_feat = ans_feat[:,-1,:].view(batch_size, query_num, -1)
 
         pred = self.classifier(ans_feat, lang_feat, img_feat, lang_feat_mask, img_feat_mask)
 

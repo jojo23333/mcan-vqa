@@ -128,13 +128,13 @@ class DataSet(Data.Dataset):
 
         indices = np.arange(0, self.ans_to_ix.__len__())
         indice_gt = indices[gt_loc]
-        assert self.__C - indice_gt.shape[0] > 0
+        assert self.__C.CLASSIFIER_QUERY_NUM - indice_gt.shape[0] > 0
         indice_random_sample = np.random.choice(
                                 a = indices[negative_loc],
                                 size = self.__C.CLASSIFIER_QUERY_NUM - indice_gt.shape[0], 
                                 replace = False
                             )
-        indices = np.stack([indice_gt, indice_random_sample], axis=0)
+        indices = np.concatenate([indice_gt, indice_random_sample], axis=0)
         return self.ans_embedding_ixs[indices], ans_iter[indices]
 
 
@@ -203,10 +203,6 @@ class DataSet(Data.Dataset):
     def __len__(self):
         return self.data_size
 
-def sample_query_ans(ans_list, ans_score):
-    """
-    input: two tensors
-    """
 
 
 
